@@ -1,0 +1,26 @@
+/vendor
+/node_modules
+/public/vendor/flow-admin
+/build
+/coverage
+/storage
+.phpunit.cache/
+.phpunit.result.cache
+composer.lock
+package-lock.json.bak
+playwright-report/
+test-results/
+.env
+.env.*.local
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.fleet/
+
+# Claude Code per-machine local config / scheduler artifacts (do not commit)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json
+.claude/sessions/

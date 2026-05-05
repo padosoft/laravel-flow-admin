@@ -1,0 +1,222 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main, 'task/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php:
+    runs-on: ubuntu-latest
+    name: PHP ${{ matrix.php }} / Laravel 13
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, openssl, pdo, pdo_sqlite, sqlite3, tokenizer, xml, ctype, json, intl
+          coverage: none
+          tools: composer:v2
+
+      - name: Composer cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ matrix.php }}-${{ hashFiles('**/composer.json') }}
+          restore-keys: composer-${{ matrix.php }}-
+
+      - name: Validate composer.json
+        if: hashFiles('composer.json') != ''
+        run: composer validate --strict --no-check-publish
+
+      - name: Install dependencies (lockfile-aware)
+        if: hashFiles('composer.json') != ''
+        run: |
+          if [ -f composer.lock ]; then
+            composer install --prefer-dist --no-interaction --no-progress
+          else
+            composer update --prefer-dist --no-interaction --no-progress
+          fi
+
+      - name: Run Pint (style check)
+        if: hashFiles('composer.json') != ''
+        run: composer format:test
+
+      - name: Run PHPStan
+        if: hashFiles('composer.json') != ''
+        run: composer analyse
+
+      - name: Run PHPUnit suites
+        if: hashFiles('composer.json') != ''
+        run: composer test
+
+      - name: PHP gate skipped (no composer.json yet)
+        if: hashFiles('composer.json') == ''
+        run: echo "composer.json not present yet — Macro 2 will introduce it."
+
+  frontend:
+    runs-on: ubuntu-latest
+    name: Frontend (Node 20)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect package manifest
+        id: pkg
+        run: |
+          if [ -f package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f package-lock.json ]; then
+            echo "lockfile=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "lockfile=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node (with npm cache)
+        if: steps.pkg.outputs.present == 'true' && steps.pkg.outputs.lockfile == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Setup Node (no cache, no lockfile yet)
+        if: steps.pkg.outputs.present == 'true' && steps.pkg.outputs.lockfile != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install npm deps
+        if: steps.pkg.outputs.present == 'true'
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Lint
+        if: steps.pkg.outputs.present == 'true'
+        run: npm run lint --if-present
+
+      - name: Build
+        if: steps.pkg.outputs.present == 'true'
+        run: npm run build --if-present
+
+      - name: Frontend gate skipped (no package.json yet)
+        if: steps.pkg.outputs.present != 'true'
+        run: echo "package.json not present yet — Macro 2 will introduce it."
+
+  e2e:
+    runs-on: ubuntu-latest
+    name: E2E ${{ matrix.browser }} (Playwright)
+    needs: [php, frontend]
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: ['chromium', 'firefox', 'webkit']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect manifests
+        id: pkg
+        run: |
+          [ -f composer.json ] && echo "composer=true" >> "$GITHUB_OUTPUT" || echo "composer=false" >> "$GITHUB_OUTPUT"
+          [ -f package.json ]  && echo "node=true"     >> "$GITHUB_OUTPUT" || echo "node=false"     >> "$GITHUB_OUTPUT"
+          [ -f package-lock.json ] && echo "lockfile=true" >> "$GITHUB_OUTPUT" || echo "lockfile=false" >> "$GITHUB_OUTPUT"
+          if [ -f playwright.config.js ] || [ -f playwright.config.ts ]; then
+            echo "pw=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pw=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup PHP 8.3
+        if: steps.pkg.outputs.composer == 'true'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, openssl, pdo, pdo_sqlite, sqlite3, tokenizer, xml, ctype, json, intl
+          coverage: none
+          tools: composer:v2
+
+      - name: Composer install (lockfile-aware)
+        if: steps.pkg.outputs.composer == 'true'
+        run: |
+          if [ -f composer.lock ]; then
+            composer install --prefer-dist --no-interaction --no-progress
+          else
+            composer update --prefer-dist --no-interaction --no-progress
+          fi
+
+      - name: Setup Node (with npm cache)
+        if: steps.pkg.outputs.node == 'true' && steps.pkg.outputs.lockfile == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Setup Node (no cache, no lockfile yet)
+        if: steps.pkg.outputs.node == 'true' && steps.pkg.outputs.lockfile != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install npm deps
+        if: steps.pkg.outputs.node == 'true'
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Fail if playwright.config exists without package.json
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node != 'true'
+        run: |
+          echo "::error::playwright.config exists but package.json is missing — add package.json before enabling E2E tests."
+          exit 1
+
+      - name: Install Playwright browsers
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run Playwright (${{ matrix.browser }})
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
+        env:
+          FLOW_ADMIN_ADAPTER: array
+        run: npm run test:e2e -- --project=${{ matrix.browser }}
+
+      - name: Upload Playwright report
+        if: failure() && steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.browser }}
+          path: playwright-report/
+          retention-days: 14
+
+      - name: E2E gate skipped (no playwright config yet)
+        if: steps.pkg.outputs.pw != 'true'
+        run: echo "playwright.config not present yet — Macro 2/3 will introduce it."
+
+      - name: E2E gate diagnostic (playwright config without Node manifest)
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node != 'true'
+        run: echo "NOTE — the explicit fail step above already exited 1; this diagnostic is unreachable but kept as a documentation anchor."
