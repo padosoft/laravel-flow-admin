@@ -476,24 +476,78 @@ Workflow `.github/workflows/ci.yml` triggerato su PR verso `main` e `task/**` + 
 - **DET**: ogni rotta + ogni endpoint API → almeno 1 scenario Playwright. Tabella di copertura in `tests/e2e/COVERAGE.md`.
 - **GR**: CI matrix browser (chromium/firefox/webkit) tutto verde.
 
-#### 9.2 — README WOW (stile AskMyDocs) + AI Vibe Coding Pack
-- **OBJ**: README di livello community-ready, ispirato a [`lopadova/AskMyDocs`](https://github.com/lopadova/AskMyDocs/blob/main/README.md), che vende il package, mostra la UI, e include esplicitamente il **"AI Vibe Coding Pack"** che spediamo nel repo (`.claude/{rules,skills,agents,commands,instructions}/`) come bonus per chi adotta il package.
-- **DET**:
-  - Hero con badge: composer downloads, license, CI status (GitHub Actions), PHP `^8.3`, Laravel `^13`, code coverage (se disponibile), latest tag.
-  - Tagline + screenshots/GIF (overview, run detail, approvals, command palette) generati con Playwright `--update-snapshots`.
+#### 9.2 — README WOW (stile AskMyDocs) + AI Vibe Coding Pack + Screenshots
+- **OBJ**: README di livello community-ready, ispirato a [`lopadova/AskMyDocs`](https://github.com/lopadova/AskMyDocs/blob/main/README.md), che vende il package, mostra la UI **da subito** con uno screenshot hero, e include esplicitamente il **"AI Vibe Coding Pack"** che spediamo nel repo (`.claude/{rules,skills,agents,commands,instructions}/`) come bonus per chi adotta il package.
+
+- **Ordine sezioni README (canonico, NON cambiare senza aggiornare il piano):**
+  1. Titolo `# 🪄 Laravel Flow Admin` + tagline.
+  2. Badge open-source / community (composer downloads, license Apache-2.0, CI status, PHP `^8.3`, Laravel `^13`, latest tag, GitHub stars, GitHub Discussions, "good first issue" count).
+  3. **Hero screenshot dashboard** subito sotto i badge:
+     ```markdown
+     ![Laravel Flow Admin — Dashboard overview](resources/screenshoots/laravel-flow-admin-dashboard.png)
+     ```
+     (Il file `resources/screenshoots/laravel-flow-admin-dashboard.png` è già presente nel repo, salvato dall'utente — è la dashboard finale renderizzata in dark mode.)
+  4. **TOC** — Table of Contents con ancore a tutte le sezioni successive.
+  5. Why this exists / What it does (3-4 paragrafi).
+  6. **📸 Screenshots** (la galleria — vedi sotto).
+  7. Quick install / Quick start.
+  8. Configuration.
+  9. Usage examples (custom authorizer, switch adapter, consume read model).
+  10. **🤖 AI Vibe Coding Pack included** (vedi sotto).
+  11. Comparison vs alternatives.
+  12. Roadmap (v0.1 / v0.2 / v0.3 / v1.0).
+  13. Test & quality counts.
+  14. Contributing → `CONTRIBUTING.md`.
+  15. Security → `SECURITY.md`.
+  16. ⭐ Community / Sponsor.
+  17. License — Apache-2.0.
+
+- **📸 Sezione Screenshots (DET)**:
+  - Tutti i file in `resources/screenshoots/` vengono inclusi. Manteniamo nome cartella `screenshoots/` per non rompere link già condivisi; in `LESSON.md` annotare il typo.
+  - Layout: griglia 2 colonne markdown table per non sforare la larghezza GitHub. Caption breve sotto ogni screenshot. Esempio:
+    ```markdown
+    ## 📸 Screenshots
+
+    | Overview & KPIs | Runs list with filters |
+    | --- | --- |
+    | ![Overview](resources/screenshoots/laravel-flow-admin-dashboard.png) | ![Runs](resources/screenshoots/laravel-flow-admin-runs.png) |
+    | _Live KPIs, throughput chart, recent runs/approvals/failures._ | _25-row dense table, status chips, fuzzy search, server-side pagination._ |
+
+    | Run detail (timeline + tabs) | Approvals queue |
+    | --- | --- |
+    | ![Run detail](resources/screenshoots/laravel-flow-admin-run-detail.png) | ![Approvals](resources/screenshoots/laravel-flow-admin-approvals.png) |
+    | _Steps timeline/Gantt/DAG, Details/Input/Output/Audit tabs, JSON drawer._ | _Approve & resume / reject & terminate flow with TTL'd token + reason._ |
+
+    | Webhook outbox | Flow definitions |
+    | --- | --- |
+    | ![Outbox](resources/screenshoots/laravel-flow-admin-webhook-outbox.png) | ![Definitions](resources/screenshoots/laravel-flow-admin-webhook-flow-definitions.png) |
+    | _Pending / delivered / dead-letter with attempt history and retry._ | _Registered flows with success-rate progress bar and activity sparkline._ |
+
+    | Configuration / Settings |  |
+    | --- | --- |
+    | ![Configuration](resources/screenshoots/laravel-flow-admin-configuration.png) |  |
+    | _Read-only authorizer / retention / webhook signing / queue snapshot — never exposes secrets._ |  |
+    ```
+  - Lazy load: usare `<picture>` con `loading="lazy"` solo se README rendering supporta HTML (GitHub sì); fallback ai `![]()` markdown standard se l'HTML non si applica.
+  - I 7 file sono attualmente: `laravel-flow-admin-dashboard.png`, `laravel-flow-admin-runs.png`, `laravel-flow-admin-run-detail.png`, `laravel-flow-admin-approvals.png`, `laravel-flow-admin-webhook-outbox.png`, `laravel-flow-admin-webhook-flow-definitions.png`, `laravel-flow-admin-configuration.png`. Se in Macro 9 la UI ha divergenze, ri-generare gli screenshot via Playwright `--update-snapshots` e tenere lo stesso file-name pattern per non rompere i link.
+
+- **Restanti DET**:
   - Quick install (`composer require padosoft/laravel-flow-admin`), publish tag, route mount, env defaults.
   - Esempi codice: come bindare un custom `DashboardActionAuthorizer`, come switchare adapter (`eloquent` vs `array`), come consumare il read model in un'app host.
-  - **Sezione "🤖 AI Vibe Coding Pack included"**: descrive il contenuto di `.claude/` (rules per Laravel 13/admin/Playwright, skills per Copilot PR loop / pre-push self-review / playwright enterprise / admin interface / test-count sync, agents per admin-interface-architect e playwright-enterprise-tester, commands), spiega che è gratis quando installi il package via Composer e mostrato per copiarsi in `.claude/` di un'app host che vuole adottare lo stesso workflow. Include link al canonical statement della Copilot+CI loop in `.claude/skills/copilot-pr-review-loop/SKILL.md`. Linka chiaramente la roadmap di adozione.
+  - **Sezione "🤖 AI Vibe Coding Pack included"**: descrive il contenuto di `.claude/` (rules per Laravel 13/admin/Playwright, skills per Copilot PR loop / pre-push self-review / playwright enterprise / admin interface / test-count sync, agents per admin-interface-architect e playwright-enterprise-tester, commands), spiega che è gratis quando installi il package via Composer (anche se in dist `.claude/` è `export-ignore`d — i contributors lo trovano clonando il repo). Include il "come copiarlo nella tua app host" e link al canonical statement della Copilot+CI loop in `.claude/skills/copilot-pr-review-loop/SKILL.md`. Linka chiaramente la roadmap di adozione.
   - Sezione **"Comparison vs alternatives"** vs Laravel Horizon (focus jobs vs flows), Laravel Pulse (focus app metrics vs workflow runs), Symfony Workflow + dashboard ad-hoc, Temporal UI. Capability cells in formato `✅ YES — …`, `⚠️ PARTIAL — …`, `❌ NO — …`.
   - Sezione **Test & quality counts** sincronizzata con output reale di `composer test` e `npm run test:e2e --reporter=line` tramite skill `test-count-readme-sync`.
   - Sezione **Roadmap** (v0.1 / v0.2 / v0.3 / v1.0 con checkbox).
   - Sezioni Contributing → `CONTRIBUTING.md`, Security → `SECURITY.md`, License → Apache-2.0.
   - Sezione **"⭐ Community"** con call-to-action: GitHub Discussions, issue templates, Twitter/X handle Padosoft, link al companion package `padosoft/laravel-flow`.
 - **GR**:
-  - Markdown link check superato (no link rotti).
+  - Markdown link check superato (no link rotti — incluso `resources/screenshoots/*.png`).
+  - Tutti i 7 PNG in `resources/screenshoots/` referenziati almeno una volta nel README; nessun PNG orfano (script di check in `scripts/check-readme-screenshots.mjs` da aggiungere in Macro 9).
+  - Hero screenshot deve essere `resources/screenshoots/laravel-flow-admin-dashboard.png`, posizionato fra badge e TOC (assert tramite test markdown).
   - Nessun `TODO`/`FIXME`/`XXX` residuo nel README.
   - Anchor link a heading con emoji testati (`grep -n '#-' README.md` → 0 match — vedi LESSON.md su slug emoji).
-  - Counts e screenshot ri-generati come ultima azione prima del tag v0.1.0.
+  - Counts e screenshot ri-generati come ultima azione prima del tag v0.1.0; se la UI è ancora pixel-perfect rispetto agli screenshot iniziali, riusare i file esistenti per stabilità del README.
+  - `resources/screenshoots/` NON è in `.gitattributes` `export-ignore`: i PNG vanno spediti nel dist Composer perché il README pubblicato su Packagist li rendera.
 
 #### 9.3 — CHANGELOG / UPGRADE / CONTRIBUTING / SECURITY / CODE_OF_CONDUCT
 - **DET**: replica struttura `padosoft-laravel-flow`.

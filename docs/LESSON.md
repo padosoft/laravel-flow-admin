@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-05-06 — README assets folder
+
+### `resources/screenshoots/` typo is preserved on purpose
+
+- The screenshots directory is `resources/screenshoots/` (sic — double `o`), not `resources/screenshots/`. The user created the folder under that name and it is referenced from the README spec in `docs/IMPLEMENTATION_PLAN.md` Macro 9.2.
+- We deliberately do **not** rename it: any external reader who already has a draft of the README, a tweet preview, or a forked branch would break. Stable URLs > spelling.
+
+**How to apply:** when adding a new screenshot, drop it under `resources/screenshoots/` with the `laravel-flow-admin-<page>.png` naming. Do not try to "fix" the folder name. If a future major bump warrants it, do the rename atomically in a single PR with link redirects + an UPGRADE entry.
+
+### Screenshots are NOT export-ignored
+
+- `.gitattributes` `export-ignore`s `.design-source/`, `.github/`, `.claude/`, `docs/`, `tests/`, etc. — but **not** `resources/`. The `resources/screenshoots/*.png` files MUST land in the Composer dist so that Packagist renders the README inline images.
+- Forgetting this would publish a broken README on the package page even though the GitHub README looks fine.
+
+**How to apply:** never add `/resources export-ignore` to `.gitattributes`. If you want to slim the dist, prune individual files inside `resources/` instead.
+
+---
+
 ## 2026-05-05 — Macro 1 PR #1 Copilot review
 
 ### `actions/setup-node@v4` validates `cache-dependency-path` BEFORE later step `if:` guards run
