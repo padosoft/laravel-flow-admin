@@ -49,6 +49,6 @@ If you re-enter this repo from a cold start:
 3. `git fetch --all && git switch <branch from table>`.
 4. `git status` — confirm clean working tree.
 5. If `composer.json` exists: `composer install`. If `package.json` exists: `npm ci`. (Not present yet during Macro 1 scaffold — skip if absent.)
-6. Run the local gate: `composer validate --strict --no-check-publish && composer format:test && composer analyse && composer test && npm run lint && npm run build && npm run test:e2e`.
+6. Run the relevant local gates (skip commands for tools not yet present): `composer validate --strict --no-check-publish && composer format:test && composer analyse && composer test` (when `composer.json` exists) + `npm run lint && npm run build && npm run test:e2e` (when `package.json` and `playwright.config.js` exist).
 7. If the next subtask is implementation: read the corresponding §3 entry in `IMPLEMENTATION_PLAN.md`.
 8. If you are mid-PR loop: run `gh pr view <N> --json state,reviewDecision,statusCheckRollup` and continue the Copilot+CI loop per `.claude/skills/copilot-pr-review-loop/SKILL.md`.

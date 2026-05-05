@@ -215,4 +215,8 @@ jobs:
 
       - name: E2E gate skipped (no playwright config yet)
         if: steps.pkg.outputs.pw != 'true'
-        run: echo "playwright.config not present yet — Macro 2 will introduce it."
+        run: echo "playwright.config not present yet — Macro 2/3 will introduce it."
+
+      - name: E2E gate diagnostic (playwright config without Node manifest)
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node != 'true'
+        run: echo "NOTE — the explicit fail step above already exited 1; this diagnostic is unreachable but kept as a documentation anchor."
