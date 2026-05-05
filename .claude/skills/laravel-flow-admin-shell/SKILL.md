@@ -50,7 +50,7 @@ When dispatching a sub-agent, **always pass these 7 files as context.** This lis
 
 ## Where the design source lives
 
-The visual baseline is exported under `.design-source/laravel-flow-admin/project/`:
+The visual baseline is exported under `.design-source/project/`:
 
 - `index.html` — entry HTML.
 - `styles.css` — design tokens + components (light + dark themes).

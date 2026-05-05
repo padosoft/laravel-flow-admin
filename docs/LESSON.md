@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-05-06 — Macro PR #2 Codex pass
+
+### Tarball extract path mismatched the docs we wrote citing it
+
+- The Claude Design archive ships with a top-level folder named after the bundle (`laravel-flow-admin/`) holding `project/`, `chats/`, `README.md`. When we extracted into `.design-source/`, the resulting tree was `.design-source/{project,chats,README.md}` — NOT `.design-source/laravel-flow-admin/project/`.
+- We then wrote 4 docs (shell skill, AGENTS.md, docs/RULES.md ×2) referencing the wrong path. Codex caught it on macro PR #2 review (P2). The wrong path would have sent every UI implementer to a missing directory.
+
+**How to apply:** after any tarball extract, run `ls -d <extract-dir>/*` and capture the actual top-level paths into a single anchor variable, then propagate that variable into docs by search/replace. Never hand-write the path twice. Before pushing, run `grep -rn "<wrong-path>" . --include="*.md"` to confirm 0 matches across **every** entrypoint (`AGENTS.md`, `CLAUDE.md`, `docs/RULES.md`, `.claude/skills/*/SKILL.md`, `.github/copilot-instructions.md`, `.github/PULL_REQUEST_TEMPLATE.md`). The first sweep on this lesson missed 3 of those entrypoints because we only fixed the 4 files Copilot's first pass had cited; Codex's second pass caught CLAUDE.md, .github/copilot-instructions.md, and .github/PULL_REQUEST_TEMPLATE.md as still wrong.
+
+---
+
 ## 2026-05-06 — Macro 1 PR #1 second Copilot pass
 
 ### `composer update` in CI is non-reproducible once a lockfile exists

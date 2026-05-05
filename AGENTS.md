@@ -34,7 +34,7 @@ When dispatching any sub-agent, **always pass these 7 files as context**.
 - **Documentation:** update `docs/PROGRESS.md` on every meaningful handoff; `docs/LESSON.md` on every reusable discovery; README counts must match real PHPUnit/Playwright output.
 - **Security:** no secrets in UI/JSON/audit/log/exception. Mutations gated by `DashboardActionAuthorizer` (`DenyAllAuthorizer` default). Plain approval tokens never re-rendered after issuance.
 - **Public surface:** consume only `Padosoft\LaravelFlow\Dashboard\*` and the documented action API. Never reference `Persistence`/`Models`/`Queue`/`Jobs`/`Console` namespaces of the engine.
-- **UI:** pixel-perfect against `.design-source/laravel-flow-admin/project/`. Dark default. Density high. Border radius ≤ 8px. No nested cards. Every icon-only button needs `aria-label` + tooltip.
+- **UI:** pixel-perfect against `.design-source/project/`. Dark default. Density high. Border radius ≤ 8px. No nested cards. Every icon-only button needs `aria-label` + tooltip.
 
 ## Branch and PR Loop
 

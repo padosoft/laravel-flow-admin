@@ -10,7 +10,7 @@
 - Reusable findings: `docs/LESSON.md`.
 - Agent entrypoints: `AGENTS.md` and `CLAUDE.md`.
 - Repo-local shell skill: `.claude/skills/laravel-flow-admin-shell/SKILL.md`.
-- Design source: `.design-source/laravel-flow-admin/project/`.
+- Design source: `.design-source/project/`.
 
 ## Stack Direction
 
@@ -91,7 +91,7 @@ npm run test:e2e
 
 ## UI Rules
 
-- Pixel-perfect against `.design-source/laravel-flow-admin/project/`. The exported `styles.css` is the visual contract for v0.x.
+- Pixel-perfect against `.design-source/project/`. The exported `styles.css` is the visual contract for v0.x.
 - Dark theme default; light theme supported via `data-theme="light"` on `<html>`. Persist user choice in cookie `flow_admin_theme`.
 - Density: row 40px standard, 32px tight; topbar 48px; sidebar 232px wide.
 - Border radius ≤ 8px (`--radius-md`). No values larger than that.
