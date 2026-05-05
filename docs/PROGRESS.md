@@ -5,17 +5,16 @@
 
 ## Now / Next / Blocked
 
-- **Now**: Macro 1 — Agent Operating System.
-  - Subtask 1.1+1.2+1.3 bundled in branch `subtask/agent-os-1-import-rules` (single PR for the whole bookkeeping macro).
-- **Next**: Macro 2 — Baseline Laravel 13 Package Tooling.
-- **Blocked**: nothing. CI workflow not yet active — first PR of subtask 1.1 will exercise it on this repo.
+- **Now**: Macro 1 PR loop — `subtask/agent-os-1-import-rules` PR #1 open, awaiting CI (php/frontend/e2e jobs gated by `hashFiles()` so should report success on this scaffold-only PR) and Copilot Code Review.
+- **Next**: When PR #1 is green + Copilot resolved → squash-merge into `task/agent-operating-system`, then open macro PR `task/agent-operating-system` → `main`. Then start Macro 2 (`task/baseline-tooling`).
+- **Blocked**: nothing.
 
 ## Active branches
 
 | Branch | Base | Status | PR |
 |--------|------|--------|----|
 | `task/agent-operating-system` | `main` | open (macro) | — |
-| `subtask/agent-os-1-import-rules` | `task/agent-operating-system` | open (in progress) | not pushed yet |
+| `subtask/agent-os-1-import-rules` | `task/agent-operating-system` | PR open | https://github.com/padosoft/laravel-flow-admin/pull/1 (Copilot requested via GraphQL fallback) |
 
 ## Macro task status
 
