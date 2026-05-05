@@ -1,8 +1,8 @@
 # `padosoft/laravel-flow-admin` — Implementation Plan
 
 > Ultimo aggiornamento: **2026-05-05**
-> Owner: `padosoft` · Maintainer: `lorenzo.padovani@padosoft.com`
-> Repository: `padosoft/laravel-flow-admin` (mirror locale: `C:\Users\lopad\Documents\DocLore\Visual Basic\Ai\laravel-flow-admin`)
+> Owner: [`@padosoft`](https://github.com/padosoft) · Maintainer: [`@lopadova`](https://github.com/lopadova)
+> Repository: [`padosoft/laravel-flow-admin`](https://github.com/padosoft/laravel-flow-admin)
 
 Questo documento è la **Single Source of Truth** del piano di implementazione.
 È letto:
@@ -476,15 +476,24 @@ Workflow `.github/workflows/ci.yml` triggerato su PR verso `main` e `task/**` + 
 - **DET**: ogni rotta + ogni endpoint API → almeno 1 scenario Playwright. Tabella di copertura in `tests/e2e/COVERAGE.md`.
 - **GR**: CI matrix browser (chromium/firefox/webkit) tutto verde.
 
-#### 9.2 — README WOW (stile AskMyDocs)
+#### 9.2 — README WOW (stile AskMyDocs) + AI Vibe Coding Pack
+- **OBJ**: README di livello community-ready, ispirato a [`lopadova/AskMyDocs`](https://github.com/lopadova/AskMyDocs/blob/main/README.md), che vende il package, mostra la UI, e include esplicitamente il **"AI Vibe Coding Pack"** che spediamo nel repo (`.claude/{rules,skills,agents,commands,instructions}/`) come bonus per chi adotta il package.
 - **DET**:
-  - Hero con badge (composer downloads, license, CI, PHP, Laravel).
-  - Demo GIF/screenshot delle pagine principali.
-  - Quick install, configurazione, esempi codice.
-  - Sezione Comparison vs alternatives (Horizon-style packages).
-  - Roadmap, Contributing, Security, License.
-  - Counts test/playwright sincronizzati con output reale (skill `test-count-readme-sync`).
-- **GR**: link check superato; nessun `TODO` residuo.
+  - Hero con badge: composer downloads, license, CI status (GitHub Actions), PHP `^8.3`, Laravel `^13`, code coverage (se disponibile), latest tag.
+  - Tagline + screenshots/GIF (overview, run detail, approvals, command palette) generati con Playwright `--update-snapshots`.
+  - Quick install (`composer require padosoft/laravel-flow-admin`), publish tag, route mount, env defaults.
+  - Esempi codice: come bindare un custom `DashboardActionAuthorizer`, come switchare adapter (`eloquent` vs `array`), come consumare il read model in un'app host.
+  - **Sezione "🤖 AI Vibe Coding Pack included"**: descrive il contenuto di `.claude/` (rules per Laravel 13/admin/Playwright, skills per Copilot PR loop / pre-push self-review / playwright enterprise / admin interface / test-count sync, agents per admin-interface-architect e playwright-enterprise-tester, commands), spiega che è gratis quando installi il package via Composer e mostrato per copiarsi in `.claude/` di un'app host che vuole adottare lo stesso workflow. Include link al canonical statement della Copilot+CI loop in `.claude/skills/copilot-pr-review-loop/SKILL.md`. Linka chiaramente la roadmap di adozione.
+  - Sezione **"Comparison vs alternatives"** vs Laravel Horizon (focus jobs vs flows), Laravel Pulse (focus app metrics vs workflow runs), Symfony Workflow + dashboard ad-hoc, Temporal UI. Capability cells in formato `✅ YES — …`, `⚠️ PARTIAL — …`, `❌ NO — …`.
+  - Sezione **Test & quality counts** sincronizzata con output reale di `composer test` e `npm run test:e2e --reporter=line` tramite skill `test-count-readme-sync`.
+  - Sezione **Roadmap** (v0.1 / v0.2 / v0.3 / v1.0 con checkbox).
+  - Sezioni Contributing → `CONTRIBUTING.md`, Security → `SECURITY.md`, License → Apache-2.0.
+  - Sezione **"⭐ Community"** con call-to-action: GitHub Discussions, issue templates, Twitter/X handle Padosoft, link al companion package `padosoft/laravel-flow`.
+- **GR**:
+  - Markdown link check superato (no link rotti).
+  - Nessun `TODO`/`FIXME`/`XXX` residuo nel README.
+  - Anchor link a heading con emoji testati (`grep -n '#-' README.md` → 0 match — vedi LESSON.md su slug emoji).
+  - Counts e screenshot ri-generati come ultima azione prima del tag v0.1.0.
 
 #### 9.3 — CHANGELOG / UPGRADE / CONTRIBUTING / SECURITY / CODE_OF_CONDUCT
 - **DET**: replica struttura `padosoft-laravel-flow`.

@@ -1,3 +1,8 @@
+---
+name: playwright-enterprise-tester
+description: Use when adding, fixing, or hardening Playwright end-to-end scenarios for Laravel admin UIs. Covers selector hygiene (data-testid + role/label, no brittle text), enterprise patterns (page objects, fixtures, retries, accessibility checks), CI matrix (chromium + firefox + webkit), visual regression with sensible tolerance, and triage of cross-browser flakiness. Trigger when creating tests under `tests/e2e/`, when CI Playwright job goes red, or when a UI page goes from prototype to v0.x and needs scenario coverage.
+---
+
 # Playwright Enterprise Tester
 
 Skill riusabile per test E2E enterprise-oriented.

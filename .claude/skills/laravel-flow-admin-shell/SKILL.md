@@ -42,10 +42,11 @@ The package **never** type-hints, extends, or mocks `Padosoft\LaravelFlow\{Persi
 2. `docs/PROGRESS.md` — handoff state (active branch, open PRs, blocker).
 3. `docs/RULES.md` — operating rules.
 4. `docs/LESSON.md` — reusable findings.
-5. `.claude/skills/copilot-pr-review-loop/SKILL.md` — mandatory Copilot+CI loop.
-6. `.claude/skills/pre-push-self-review/SKILL.md` — pre-push self-review checklist.
+5. `.claude/skills/laravel-flow-admin-shell/SKILL.md` — this file (orientation + skill priority map).
+6. `.claude/skills/copilot-pr-review-loop/SKILL.md` — mandatory Copilot+CI loop.
+7. `.claude/skills/pre-push-self-review/SKILL.md` — pre-push self-review checklist.
 
-When dispatching a sub-agent, **always pass these 6 files as context.**
+When dispatching a sub-agent, **always pass these 7 files as context.** This list aligns with `AGENTS.md` and `CLAUDE.md`; if you change it here, update both entrypoints in the same commit.
 
 ## Where the design source lives
 

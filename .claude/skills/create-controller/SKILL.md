@@ -1,3 +1,8 @@
+---
+name: create-controller
+description: Use to introduce a new Laravel controller in this package following the FormRequest → DTO → Service → ViewModel → Blade pipeline. Covers route registration in `routes/flow-admin.php`, view namespace usage (`flow-admin::`), CSRF on POST forms, authorizer gating for mutations, and Feature test coverage via Testbench. Trigger when adding/modifying any class under `src/Http/Controllers/`.
+---
+
 # Create Controller
 
 Pattern base per introdurre un controller Laravel.

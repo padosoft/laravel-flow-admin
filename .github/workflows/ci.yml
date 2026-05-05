@@ -70,27 +70,53 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Detect package manifest
+        id: pkg
+        run: |
+          if [ -f package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f package-lock.json ]; then
+            echo "lockfile=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "lockfile=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node (with npm cache)
+        if: steps.pkg.outputs.present == 'true' && steps.pkg.outputs.lockfile == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
+      - name: Setup Node (no cache, no lockfile yet)
+        if: steps.pkg.outputs.present == 'true' && steps.pkg.outputs.lockfile != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Install npm deps
-        if: hashFiles('package.json') != ''
-        run: npm ci
+        if: steps.pkg.outputs.present == 'true'
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
 
       - name: Lint
-        if: hashFiles('package.json') != ''
+        if: steps.pkg.outputs.present == 'true'
         run: npm run lint --if-present
 
       - name: Build
-        if: hashFiles('package.json') != ''
+        if: steps.pkg.outputs.present == 'true'
         run: npm run build --if-present
 
       - name: Frontend gate skipped (no package.json yet)
-        if: hashFiles('package.json') == ''
+        if: steps.pkg.outputs.present != 'true'
         run: echo "package.json not present yet — Macro 2 will introduce it."
 
   e2e:
@@ -105,8 +131,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Detect manifests
+        id: pkg
+        run: |
+          [ -f composer.json ] && echo "composer=true" >> "$GITHUB_OUTPUT" || echo "composer=false" >> "$GITHUB_OUTPUT"
+          [ -f package.json ]  && echo "node=true"     >> "$GITHUB_OUTPUT" || echo "node=false"     >> "$GITHUB_OUTPUT"
+          [ -f package-lock.json ] && echo "lockfile=true" >> "$GITHUB_OUTPUT" || echo "lockfile=false" >> "$GITHUB_OUTPUT"
+          if [ -f playwright.config.js ] || [ -f playwright.config.ts ]; then
+            echo "pw=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pw=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup PHP 8.3
-        if: hashFiles('composer.json') != ''
+        if: steps.pkg.outputs.composer == 'true'
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
@@ -115,32 +153,44 @@ jobs:
           tools: composer:v2
 
       - name: Composer install
-        if: hashFiles('composer.json') != ''
+        if: steps.pkg.outputs.composer == 'true'
         run: composer update --prefer-dist --no-interaction --no-progress
 
-      - name: Setup Node
+      - name: Setup Node (with npm cache)
+        if: steps.pkg.outputs.node == 'true' && steps.pkg.outputs.lockfile == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
-      - name: npm ci
-        if: hashFiles('package.json') != ''
-        run: npm ci
+      - name: Setup Node (no cache, no lockfile yet)
+        if: steps.pkg.outputs.node == 'true' && steps.pkg.outputs.lockfile != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install npm deps
+        if: steps.pkg.outputs.node == 'true'
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
 
       - name: Install Playwright browsers
-        if: hashFiles('package.json') != ''
+        if: steps.pkg.outputs.pw == 'true'
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Run Playwright (${{ matrix.browser }})
-        if: hashFiles('playwright.config.js') != '' || hashFiles('playwright.config.ts') != ''
+        if: steps.pkg.outputs.pw == 'true'
         env:
           FLOW_ADMIN_ADAPTER: array
         run: npm run test:e2e -- --project=${{ matrix.browser }}
 
       - name: Upload Playwright report
-        if: failure() && (hashFiles('playwright.config.js') != '' || hashFiles('playwright.config.ts') != '')
+        if: failure() && steps.pkg.outputs.pw == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ matrix.browser }}
@@ -148,5 +198,5 @@ jobs:
           retention-days: 14
 
       - name: E2E gate skipped (no playwright config yet)
-        if: hashFiles('playwright.config.js') == '' && hashFiles('playwright.config.ts') == ''
+        if: steps.pkg.outputs.pw != 'true'
         run: echo "playwright.config not present yet — Macro 2 will introduce it."

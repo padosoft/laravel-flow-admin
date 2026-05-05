@@ -1,3 +1,8 @@
+---
+name: create-api-endpoint
+description: Use when creating a JSON endpoint under `/flow/api/*` (e.g. `/flow/api/search`, `/flow/api/live`) backing the admin UI. Covers route registration, FormRequest validation, JSON resource shape, authorizer gating, CSRF or session-based auth (no Sanctum tokens for browser-held UI), pagination contract, and Feature test coverage. Trigger when adding/modifying any AJAX or polling endpoint in `routes/flow-admin.php`.
+---
+
 # Create API Endpoint
 
 Skill per creare endpoint API moderni in Laravel 13.

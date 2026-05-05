@@ -1,3 +1,8 @@
+---
+name: create-service
+description: Use when creating a small focused service or action object in this Laravel package (no fat services, no static helpers). Covers single-responsibility design, constructor DI, immutable inputs/outputs (DTOs, view models), explicit exceptions, and unit-test scaffolding. Trigger when adding/modifying any class under `src/Support/`, `src/Adapters/`, or any non-controller orchestration class.
+---
+
 # Create Service
 
 Pattern per creare un service o action object in Laravel.

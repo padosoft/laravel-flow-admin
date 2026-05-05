@@ -1,3 +1,8 @@
+---
+name: create-test
+description: Use when introducing PHPUnit Unit / Feature / Architecture tests for new Laravel package code. Covers Testbench TestCase setup, SQLite fixtures, RefreshDatabase, snapshot DTO assertions, architecture pins for `Padosoft\LaravelFlowAdmin\Contracts\*` and config-key invariants. Pair with `playwright-enterprise-tester` for new UI behaviour. Trigger before pushing any PR that adds/modifies behaviour without a corresponding test.
+---
+
 # Create Test
 
 Per nuovo codice Laravel:

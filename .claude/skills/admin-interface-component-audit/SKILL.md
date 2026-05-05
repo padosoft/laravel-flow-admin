@@ -1,3 +1,8 @@
+---
+name: admin-interface-component-audit
+description: Use BEFORE building or refactoring any admin page to inventory existing Blade components, partials, design tokens, and reusable Alpine stores so the new work composes existing primitives instead of duplicating them. Trigger at the start of every Macro 3/5/6/7 UI slice, before adding a new Blade component, or when Copilot flags duplication during review.
+---
+
 # Component Audit
 
 Prima di creare una nuova interfaccia admin:
