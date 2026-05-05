@@ -190,17 +190,17 @@ jobs:
           fi
 
       - name: Install Playwright browsers
-        if: steps.pkg.outputs.pw == 'true'
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Run Playwright (${{ matrix.browser }})
-        if: steps.pkg.outputs.pw == 'true'
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         env:
           FLOW_ADMIN_ADAPTER: array
         run: npm run test:e2e -- --project=${{ matrix.browser }}
 
       - name: Upload Playwright report
-        if: failure() && steps.pkg.outputs.pw == 'true'
+        if: failure() && steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ matrix.browser }}

@@ -47,10 +47,10 @@ function Sidebar({ route, onNavigate, counts }) {
       </nav>
       <div className="sidebar-footer">
         <div className="user-chip">
-          <div className="avatar">MR</div>
+          <div className="avatar">AO</div>
           <div className="user-info">
-            <b>Marco Rossi</b>
-            <small>admin · padosoft</small>
+            <b>Alex Operator</b>
+            <small>admin · example.test</small>
           </div>
         </div>
         <button className="iconbtn" title="Account"><I.ChevronDown size={14}/></button>

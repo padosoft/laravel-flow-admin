@@ -146,7 +146,7 @@ Workflow `.github/workflows/ci.yml` triggerato su PR verso `main` e `task/**` + 
   - Copiare `.claude/rules/playwright/{rule-frontend-testability-contracts.md, rule-ci-test-failure-analysis.md}` → `.claude/rules/playwright/`.
   - Copiare `.claude/skills/{copilot-pr-review-loop, pre-push-self-review, review-pr-comments, create-admin-interface, admin-interface-backend, admin-interface-frontend, admin-interface-component-audit, playwright-enterprise-tester, test-count-readme-sync, create-controller, create-test, create-service}` → `.claude/skills/`.
   - Adattare ogni skill rimuovendo riferimenti `laravel-flow-enterprise` e sostituendoli con `laravel-flow-admin` dove non pertinenti.
-  - Creare nuova skill **`flow-admin-blade-component`** che spiega la convenzione partials/icons/Alpine.
+  - La skill **`flow-admin-blade-component`** (convenzione partials/icons/Alpine) sarà creata in Macro 3 una volta che la struttura definitiva dei component Blade è stabilita; non appartiene a Macro 1 che è solo scaffold.
 - **GR**:
   - `grep -R "laravel-flow-enterprise" .claude/` non deve restituire match (eccetto file storici espliciti).
   - Ogni file in `.claude/skills/*/SKILL.md` deve avere frontmatter YAML con `name` e `description`.
