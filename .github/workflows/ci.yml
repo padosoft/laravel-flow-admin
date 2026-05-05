@@ -44,9 +44,14 @@ jobs:
         if: hashFiles('composer.json') != ''
         run: composer validate --strict --no-check-publish
 
-      - name: Install dependencies
+      - name: Install dependencies (lockfile-aware)
         if: hashFiles('composer.json') != ''
-        run: composer update --prefer-dist --no-interaction --no-progress
+        run: |
+          if [ -f composer.lock ]; then
+            composer install --prefer-dist --no-interaction --no-progress
+          else
+            composer update --prefer-dist --no-interaction --no-progress
+          fi
 
       - name: Run Pint (style check)
         if: hashFiles('composer.json') != ''
@@ -152,9 +157,14 @@ jobs:
           coverage: none
           tools: composer:v2
 
-      - name: Composer install
+      - name: Composer install (lockfile-aware)
         if: steps.pkg.outputs.composer == 'true'
-        run: composer update --prefer-dist --no-interaction --no-progress
+        run: |
+          if [ -f composer.lock ]; then
+            composer install --prefer-dist --no-interaction --no-progress
+          else
+            composer update --prefer-dist --no-interaction --no-progress
+          fi
 
       - name: Setup Node (with npm cache)
         if: steps.pkg.outputs.node == 'true' && steps.pkg.outputs.lockfile == 'true'

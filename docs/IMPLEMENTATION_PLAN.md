@@ -635,7 +635,7 @@ gh pr merge <N> --squash
 ## 6. Riferimenti
 
 - Design source: `.design-source/` (estratto dal handoff Claude Design `eZVMtDE08LRjCs4EOsNgzg`).
-- Package backend: https://github.com/padosoft/laravel-flow (`v1.0`).
-- Reference repo (rules/skills): `C:\Users\lopad\Documents\DocLore\Visual Basic\Ai\padosoft-laravel-flow`.
-- Reference repo (admin app): `C:\Users\lopad\Documents\DocLore\Visual Basic\Ai\product_image_discovery_admin`.
-- README ispirazionale: https://github.com/lopadova/AskMyDocs/blob/main/README.md.
+- Package backend: [`padosoft/laravel-flow`](https://github.com/padosoft/laravel-flow) (`v1.0`).
+- Reference repo (rules/skills, public): [`padosoft/laravel-flow`](https://github.com/padosoft/laravel-flow) — `.claude/` folder is the source of the imported rules and skills baseline.
+- Reference repo (admin app pattern, internal): the `padosoft/product-image-discovery-admin` workspace contributors maintain — see internal docs in that repo for the per-task gate cadence we mirror here. Not linkable from a public package.
+- README ispirazionale: [`lopadova/AskMyDocs/README.md`](https://github.com/lopadova/AskMyDocs/blob/main/README.md).

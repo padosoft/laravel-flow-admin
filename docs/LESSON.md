@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-05-06 — Macro 1 PR #1 second Copilot pass
+
+### `composer update` in CI is non-reproducible once a lockfile exists
+
+- Even with `--prefer-dist --no-interaction --no-progress`, `composer update` recalculates the dependency tree on every CI run, ignoring `composer.lock` and producing drift between runs (and between local + CI).
+- Before lockfile exists (Macro 1 scaffold), `composer install` would fail because there is no lock to install from. So the install step needs to be lockfile-aware, not statically `composer update` or `composer install`.
+
+**How to apply:** every CI Composer install step uses `if [ -f composer.lock ]; then composer install --prefer-dist ...; else composer update --prefer-dist ...; fi`. Lock files become enforced from Macro 2 onward; the conditional keeps the scaffold green and the production runs reproducible.
+
+### Mock data fixtures must use `*.example.test` / `*.example.com`, not real-looking emails
+
+- Even when `.design-source/` is `export-ignore`d from the Composer dist, files committed to the public repo are scanned by GitHub secret/PII scanners and indexed by anyone browsing the source tree.
+- Real-looking domain emails (`m.rossi@example.com`, `admin@padosoft.com`) trigger false positives on PII scanners and contradict the same rule we apply to docs (no personal info in public repos).
+
+**How to apply:** all mock fixtures (now and in Macro 4 ArrayReadModel) use the IETF-reserved test TLDs: `*.example.test` (preferred for actor identifiers), `*.example.com` (only for canonical examples). Never use `padosoft.com`, real first-name+lastname, or any real domain in fixtures.
+
+---
+
 ## 2026-05-06 — README assets folder
 
 ### `resources/screenshoots/` typo is preserved on purpose
