@@ -189,6 +189,12 @@ jobs:
             npm install --no-audit --no-fund
           fi
 
+      - name: Fail if playwright.config exists without package.json
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node != 'true'
+        run: |
+          echo "::error::playwright.config exists but package.json is missing — add package.json before enabling E2E tests."
+          exit 1
+
       - name: Install Playwright browsers
         if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         run: npx playwright install --with-deps ${{ matrix.browser }}
