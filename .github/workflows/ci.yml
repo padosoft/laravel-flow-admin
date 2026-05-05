@@ -189,18 +189,24 @@ jobs:
             npm install --no-audit --no-fund
           fi
 
+      - name: Fail if playwright.config exists without package.json
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node != 'true'
+        run: |
+          echo "::error::playwright.config exists but package.json is missing — add package.json before enabling E2E tests."
+          exit 1
+
       - name: Install Playwright browsers
-        if: steps.pkg.outputs.pw == 'true'
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Run Playwright (${{ matrix.browser }})
-        if: steps.pkg.outputs.pw == 'true'
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         env:
           FLOW_ADMIN_ADAPTER: array
         run: npm run test:e2e -- --project=${{ matrix.browser }}
 
       - name: Upload Playwright report
-        if: failure() && steps.pkg.outputs.pw == 'true'
+        if: failure() && steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ matrix.browser }}
@@ -209,4 +215,8 @@ jobs:
 
       - name: E2E gate skipped (no playwright config yet)
         if: steps.pkg.outputs.pw != 'true'
-        run: echo "playwright.config not present yet — Macro 2 will introduce it."
+        run: echo "playwright.config not present yet — Macro 2/3 will introduce it."
+
+      - name: E2E gate diagnostic (playwright config without Node manifest)
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node != 'true'
+        run: echo "NOTE — the explicit fail step above already exited 1; this diagnostic is unreachable but kept as a documentation anchor."
