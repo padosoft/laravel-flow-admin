@@ -5,31 +5,33 @@
 
 ## Now / Next / Blocked
 
-- **Now**: Closing Macro 1 — subtask PR #4 (`agent-os-3-macro-pr-fixes`) open targeting `task/agent-operating-system`; macro PR #2 (`task/agent-operating-system` → `main`) will be merged once #4 is merged. Running full Copilot+CI loop.
-- **Next**: After macro PR #2 merges → Macro 2 (`task/baseline-tooling`): `composer.json`, `package.json`, Vite, PHPUnit, Pint, PHPStan, Playwright bootstrap, FlowAdminServiceProvider skeleton.
+- **Now**: Macro 2 (`task/baseline-tooling`) — subtask `baseline-1-composer-phpunit-pint-phpstan` starting.
+- **Next**: After Macro 2 → Macro 3 Design System.
 - **Blocked**: nothing.
 
-## Macro 1 merge history
+## Macro 1 — DONE ✅
 
-| PR | Type | Head | Status | Squash SHA on target |
-|----|------|------|--------|----------------------|
-| #1 | subtask | `subtask/agent-os-1-import-rules` → `task/agent-operating-system` | merged | `2c6f478` |
-| #3 | subtask hotfix | `subtask/agent-os-2-fix-design-path` → `task/agent-operating-system` | merged | `e9c8194` |
-| #4 | subtask hotfix | `subtask/agent-os-3-macro-pr-fixes` → `task/agent-operating-system` | **open** | pending |
-| #2 | macro | `task/agent-operating-system` → `main` | **open** (closes after #4) | pending |
+Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
+
+| PR | Type | Squash SHA |
+|----|------|------------|
+| #1 | subtask (rules/skills/agents/docs/CI scaffold) | `2c6f478` on `task/agent-operating-system` |
+| #3 | subtask hotfix (design-path fix in 7 entrypoints) | `e9c8194` on `task/agent-operating-system` |
+| #4 | subtask hotfix (6 genuine Copilot issues: PROGRESS/CI/plan/PII/README) | `d4a2e49` on `task/agent-operating-system` |
+| #2 | macro → main | `f32ac2f` on `main` |
 
 ## Active branches
 
 | Branch | Base | Status |
 |--------|------|--------|
-| `task/agent-operating-system` | `main` | open (macro) |
-| `subtask/agent-os-3-macro-pr-fixes` | `task/agent-operating-system` | open (in progress) |
+| `task/baseline-tooling` | `main` | open (macro) — Macro 2 |
+| `subtask/baseline-1-composer-phpunit-pint-phpstan` | `task/baseline-tooling` | in progress |
 
 ## Macro task status
 
 | # | Macro | Branch | State |
 |---|-------|--------|-------|
-| 1 | Agent Operating System | `task/agent-operating-system` | closing (PR #2 pending) |
+| 1 | Agent Operating System | `task/agent-operating-system` | ✅ merged on main `f32ac2f` |
 | 2 | Baseline Tooling Laravel 13 | `task/baseline-tooling` | not started |
 | 3 | Design System & Layout Shell | `task/design-system-shell` | not started |
 | 4 | Read Model Adapter | `task/read-model-adapter` | not started |
