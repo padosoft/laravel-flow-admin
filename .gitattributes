@@ -1,0 +1,17 @@
+* text=auto eol=lf
+
+# Documentation and assets that should NOT be shipped in the Composer dist
+/.design-source export-ignore
+/.github       export-ignore
+/.claude       export-ignore
+/docs          export-ignore
+/tests         export-ignore
+/playwright.config.js export-ignore
+/phpunit.xml   export-ignore
+/phpstan.neon.dist export-ignore
+/pint.json     export-ignore
+/.editorconfig export-ignore
+/.gitignore    export-ignore
+/.gitattributes export-ignore
+/AGENTS.md     export-ignore
+/CLAUDE.md     export-ignore
