@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(composer:*)",
+      "Bash(php artisan:*)",
+      "Bash(npm:*)",
+      "Bash(npx playwright:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)"
+    ]
+  }
+}
