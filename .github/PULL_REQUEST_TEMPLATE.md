@@ -33,7 +33,7 @@
 
 ## UI changes (if any)
 
-- [ ] Pixel-perfect against `.design-source/laravel-flow-admin/project/` reference.
+- [ ] Pixel-perfect against `.design-source/project/` reference.
 - [ ] Dark theme + light theme both verified.
 - [ ] Border radius ≤ 8px, no nested cards, no marketing hero.
 - [ ] Every icon-only button has `aria-label` + tooltip.

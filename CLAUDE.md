@@ -22,7 +22,7 @@ When dispatching a sub-agent, pass all 7 files as context. The shell skill expla
 - Merge only after every required CI job is green AND Copilot has approved or has zero must-fix outstanding.
 - Update `docs/PROGRESS.md` on every meaningful handoff; update `docs/LESSON.md` whenever a Copilot comment / CI failure / debugging session yields a reusable insight.
 - README test/assertion counts and Playwright scenario counts must match real tool output (skill `test-count-readme-sync`).
-- Pixel-perfect against `.design-source/laravel-flow-admin/project/`. Dark theme is the default; light theme must work too.
+- Pixel-perfect against `.design-source/project/`. Dark theme is the default; light theme must work too.
 - Mutations (resume, reject, replay, cancel, retry webhook) go through `DashboardActionAuthorizer` (default `DenyAllAuthorizer`). Never bypass.
 - Never reference `Padosoft\LaravelFlow\{Persistence,Models,Queue,Jobs,Console}\*` from this package — they are `@internal`.
 

@@ -7,7 +7,7 @@ This repository is a **Laravel 13.x package** that ships an admin UI/UX for the 
 - **Stack**: Laravel `^13.0`, PHP `^8.3` (CI matrix on PHP 8.3 + 8.4). Frontend: Blade + Vite + Alpine.js. Tests: PHPUnit + Orchestra Testbench + Playwright.
 - **Public surface**: only `Padosoft\LaravelFlow\Dashboard\*` (`FlowDashboardReadModel`, `DashboardActionAuthorizer`, public DTOs `RunDetail`/`ApprovalSummary`/`KpiSummary`) and the documented action API (`Flow::resume`, `Flow::reject`, `flow:replay`, `flow:deliver-webhooks`).
 - **Internal surface (do NOT reference)**: `Padosoft\LaravelFlow\{Persistence,Models,Queue,Jobs,Console}\*`. Flag any code that type-hints, extends, mocks, or reflects on these.
-- **Design contract**: pixel-perfect against `.design-source/laravel-flow-admin/project/`. The exported `styles.css` is the visual contract; classnames and CSS tokens (`--bg`, `--text`, `--accent`, `--status-*`, `--radius-*`, etc.) are part of the public contract for v0.x and must not be renamed silently.
+- **Design contract**: pixel-perfect against `.design-source/project/`. The exported `styles.css` is the visual contract; classnames and CSS tokens (`--bg`, `--text`, `--accent`, `--status-*`, `--radius-*`, etc.) are part of the public contract for v0.x and must not be renamed silently.
 - **Security posture**:
   - `DashboardActionAuthorizer` ships as `DenyAllAuthorizer` by default. Reject any change that flips the default to permissive.
   - Plain approval tokens are returned only at issuance time. Flag any code path that persists, logs, re-renders, or copies a plain token to the clipboard from server data.
