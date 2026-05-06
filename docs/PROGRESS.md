@@ -5,13 +5,14 @@
 
 ## Now / Next / Blocked
 
-- **Now**: Macro 3 (`task/design-system-shell`) — subtask 3.1 in flight on
-  `subtask/design-system-1-styles-port`: pixel-perfect port of
-  `.design-source/project/styles.css` (1208 lines) to
-  `resources/css/admin.css`, served at `/_flow-admin/assets/admin.css`.
-- **Next**: Subtask 3.2 — layout Blade shell + sidebar/topbar/breadcrumbs +
-  `x-flow-admin::icon` + theme cookie toggle. Then macro PR #?? → `main`,
-  then Macro 4 Read Model Adapter on `task/read-model-adapter`.
+- **Now**: Macro 4 (`task/read-model-adapter`) — subtask 4.1 in flight on
+  `subtask/read-model-1-viewmodels`: `Contracts\Dto\*` (RunSummary,
+  RunDetail, Step, AuditEvent, KpiSummary, ThroughputBucket,
+  ApprovalSummary, OutboxEntry, FlowDefinition) + `ViewModels\*` with
+  `fromDto` factories + `Support\Format` helper.
+- **Next**: Subtask 4.2 EloquentReadModel, 4.3 ArrayReadModel, 4.4
+  DashboardActionAuthorizer wrapper. Then macro PR → `main`, then
+  Macro 5 Pages Overview & Runs.
 - **Blocked**: nothing.
 
 ## Macro 2 — DONE ✅
@@ -40,8 +41,8 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 
 | Branch | Base | Status |
 |--------|------|--------|
-| `task/design-system-shell` | `main` | open (macro) — Macro 3 |
-| `subtask/design-system-2-layout-shell` | `task/design-system-shell` | in progress — layout shell + sidebar/topbar/breadcrumbs + icon component + theme toggle |
+| `task/read-model-adapter` | `main` | open (macro) — Macro 4 |
+| `subtask/read-model-1-viewmodels` | `task/read-model-adapter` | in progress — DTO contracts + ViewModels + 49 unit tests / 211 assertions |
 
 ## Macro task status
 
@@ -49,7 +50,8 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 |---|-------|--------|-------|
 | 1 | Agent Operating System | `task/agent-operating-system` | ✅ merged on main `f32ac2f` |
 | 2 | Baseline Tooling Laravel 13 | `task/baseline-tooling` | ✅ merged on main `1f5d0ed` |
-| 3 | Design System & Layout Shell | `task/design-system-shell` | in progress — subtask 3.1 (styles port) |
+| 3 | Design System & Layout Shell | `task/design-system-shell` | ✅ merged on main `617e427` |
+| 4 | Read Model Adapter | `task/read-model-adapter` | in progress — subtask 4.1 (DTOs + ViewModels) |
 | 4 | Read Model Adapter | `task/read-model-adapter` | not started |
 | 5 | Pages — Overview & Runs | `task/pages-overview-runs` | not started |
 | 6 | Pages — Run Detail | `task/pages-run-detail` | not started |
