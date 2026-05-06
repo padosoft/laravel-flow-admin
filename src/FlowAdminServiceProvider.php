@@ -22,12 +22,19 @@ class FlowAdminServiceProvider extends ServiceProvider
 
         $this->loadRoutesFrom(__DIR__ . '/../routes/flow-admin.php');
 
-        $this->publishes([
-            __DIR__ . '/../config/flow-admin.php' => config_path('flow-admin.php'),
-        ], 'flow-admin-config');
+        if ($this->app->runningInConsole()) {
+            $this->publishes([
+                __DIR__ . '/../config/flow-admin.php' => config_path('flow-admin.php'),
+            ], 'flow-admin-config');
 
-        $this->publishes([
-            __DIR__ . '/../resources/views' => resource_path('views/vendor/flow-admin'),
-        ], 'flow-admin-views');
+            $this->publishes([
+                __DIR__ . '/../resources/views' => resource_path('views/vendor/flow-admin'),
+            ], 'flow-admin-views');
+
+            $this->publishes([
+                __DIR__ . '/../resources/css' => public_path('vendor/flow-admin/css'),
+                __DIR__ . '/../resources/js' => public_path('vendor/flow-admin/js'),
+            ], 'flow-admin-assets');
+        }
     }
 }
