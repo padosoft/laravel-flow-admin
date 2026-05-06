@@ -42,7 +42,7 @@ final class DefinitionRowTest extends TestCase
 
         $vm = DefinitionRow::fromDto($dto);
 
-        $this->assertSame('0%', $vm->successRateLabel);
+        $this->assertSame('0.0%', $vm->successRateLabel);
         $this->assertSame(0.0, $vm->successRateRatio);
     }
 }

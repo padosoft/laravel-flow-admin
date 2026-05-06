@@ -21,8 +21,8 @@ final readonly class KpiSummary
      * @param  int  $deltaFailedRuns  Period-over-period change (signed).
      * @param  int  $avgDurationMs  Fallback mean run duration in ms over the period.
      * @param  int  $p95DurationMs  P95 duration in ms over the period. If
-     *                             unavailable, adapter should default this to
-     *                             `$avgDurationMs`.
+     *                              unavailable, adapter should default this to
+     *                              `$avgDurationMs`.
      * @param  int  $deltaAvgDurationMs  Period-over-period change in ms (signed).
      */
     public function __construct(
