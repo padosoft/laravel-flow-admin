@@ -1,0 +1,12 @@
+/*
+ * Laravel Flow Admin — bootstrap stylesheet stub.
+ *
+ * Macro 3 ports the full design-token system (light + dark themes,
+ * sidebar/topbar/kpi/table/modal/drawer/palette/toast/step list/gantt/dag/charts)
+ * from .design-source/project/styles.css into this file. For Macro 2 we only
+ * ship a placeholder so Vite has a CSS entry point and the publish target
+ * resources/css/ exists in the dist.
+ */
+:root {
+  --flow-admin-bootstrap: 1;
+}

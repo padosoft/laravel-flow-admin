@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-05-06 — Subtask 2.3 Playwright web-server cross-platform launcher
+
+### Node `spawn('php', …)` on Windows fails for two compounding reasons
+
+- Node's `spawn` without `shell: true` does **not** honour Windows `PATHEXT`, so `spawn('php', args)` returns `ENOENT` even when `php.exe` is on `PATH`.
+- Adding `shell: true` triggers the Node 22+ deprecation about non-escaped args, and **also** misparses paths that contain spaces — for this repo `vendor/bin/testbench` lives under `…\Visual Basic\Ai\laravel-flow-admin\…`, and the space in `Visual Basic` causes cmd to split the testbench path into two arguments, breaking the launch (`spawn EINVAL`).
+- A `where php` lookup followed by `spawn(absolutePath, args)` works for `.exe`, but if `where` returns a `.bat`/`.cmd` shim first (common on dev machines that wrap PHP through Composer scripts) Node ≥18 refuses to spawn it without `shell: true`, putting us back to the previous problem.
+
+**How to apply:** in cross-platform launchers like `scripts/serve-testbench.mjs`, branch on `process.platform`:
+
+- POSIX: plain `spawn('php', [testbench, …])`.
+- Windows: `spawn('cmd.exe', ['/d','/s','/c', `php "${testbench}" serve …`], { windowsVerbatimArguments: true })`. The `cmd.exe /d /s /c` invocation lets cmd resolve `php` via PATHEXT, and the explicit double-quotes around the testbench path survive the space in `Visual Basic`. Keep the args list to `cmd.exe` minimal (only the single command-string after `/c`) to avoid re-quoting issues.
+
+CI runs on Linux so it always takes the POSIX branch — Windows quirks never reach the green-bar path. The Windows branch exists only for local DX on the maintainer's box.
+
+### Make `flow-admin.middleware` env-driven so E2E can skip auth without forking config
+
+- The default `['web', 'auth']` is correct for production but blocks E2E smoke specs (which would have to seed an authenticated session for every spec just to GET `/flow`).
+- Hard-coding two configs (one for prod, one for tests) drifts; coupling the smoke to a fixture login is overkill for a "does the bundle wire up?" check.
+
+**How to apply:** keep the single `config/flow-admin.php` `middleware` key as the public contract, but read it from `FLOW_ADMIN_MIDDLEWARE` (CSV, default `web,auth`). The E2E launcher (`scripts/serve-testbench.mjs`) sets `FLOW_ADMIN_MIDDLEWARE=web` so testbench serve routes through `web` only. Production deployments override via real env. The existing `test_config_is_loaded` already asserts only key presence — no test breakage.
+
+---
+
 ## 2026-05-06 — Macro PR #2 Codex pass
 
 ### Tarball extract path mismatched the docs we wrote citing it

@@ -1,0 +1,23 @@
+{
+  "name": "@padosoft/laravel-flow-admin",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Frontend bundle (Blade + Vite + Alpine.js + Playwright) for padosoft/laravel-flow-admin.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint resources/js tests/e2e scripts",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "@playwright/test": "^1.49.0",
+    "alpinejs": "^3.14.3",
+    "eslint": "^9.15.0",
+    "globals": "^15.12.0",
+    "vite": "^5.4.10"
+  }
+}
