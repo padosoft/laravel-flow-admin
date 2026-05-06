@@ -7,6 +7,19 @@
 
 ## 2026-05-06 — Subtask 2.3 Playwright CI green-up
 
+### Workflow-step `env:` does NOT propagate to PHP `env()` reliably under `vendor/bin/testbench serve` — use `testbench.yaml` `env:` block
+
+- GH Actions `env:` blocks export shell vars before the step's `run:`. PHP CLI inherits the shell env, so `getenv()` and `$_SERVER[...]` see the variable. But Laravel's `env()` helper (and our package's `env('FLOW_ADMIN_MIDDLEWARE', 'web,auth')` default) reads through `Dotenv\Repository\AdapterRepository`, which testbench's bootstrap rebinds. After `Application::create()` runs `LoadEnvironmentVariables` (the bundled `vendor/orchestra/testbench-core/laravel/.env`), our shell-exported `FLOW_ADMIN_MIDDLEWARE=web` was lost — `env()` returned `null` and the controller fell back to `['web', 'auth']`. Result on /flow: `Authenticate` middleware kicked in, redirected to `route('login')`, that route does not exist in testbench's bundled app, and we got `Symfony\\…\\RouteNotFoundException: Route [login] not defined.` rendered as a 500 — Playwright then timed out because 500 is not a `webServer.url` ready signal.
+- The diagnostic step that surfaced this used `APP_DEBUG=true APP_KEY=…` to coax Laravel's exception page out of production (`<title>Laravel</title>` only) into debug mode. The actual exception class lived in a JSON-encoded `markdown` blob inside the rendered React error page — `head -c 4000` clipped before it; the right capture is `tail -c 1500` plus a targeted `grep -oE '<h1[^>]*>[^<]+</h1>'`.
+
+**How to apply:** for any env override that the package code reads via `env()`, add it to `testbench.yaml` under the `env:` block:
+```yaml
+env:
+  FLOW_ADMIN_MIDDLEWARE: web
+  FLOW_ADMIN_ADAPTER: array
+```
+This block is processed by `Orchestra\Testbench\Foundation\Bootstrap\LoadEnvironmentVariablesFromArray` *after* the standard `LoadEnvironmentVariables` bootstrapper, so it always wins. The `testbench.yaml` is already a dev/test-only file — it never reaches consumer apps — so dropping `auth` here does not weaken the production default. Keep an explicit `FLOW_ADMIN_MIDDLEWARE: web` in the CI step env too as belt-and-suspenders documentation; `testbench.yaml` is the truthful source.
+
 ### `vendor/bin/testbench serve` does NOT auto-discover the host package's providers
 
 - `extra.laravel.providers` in the host package's `composer.json` is the discovery contract for **consumer** Laravel apps that depend on the package — not for the package's own dev-time Testbench server.

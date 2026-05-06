@@ -2,3 +2,15 @@ laravel: '@testbench'
 
 providers:
   - Padosoft\LaravelFlowAdmin\FlowAdminServiceProvider
+
+# Env block runs *after* Dotenv via Orchestra\Testbench\Foundation\Bootstrap\
+# LoadEnvironmentVariablesFromArray, so it always wins over the testbench-core
+# bundled .env. We use it for two dev-only overrides:
+#   - FLOW_ADMIN_MIDDLEWARE=web → drop the `auth` middleware so the smoke spec
+#     does not need to seed an authenticated session. Production stays on
+#     `web,auth` because production deployments do not ship testbench.yaml.
+#   - FLOW_ADMIN_ADAPTER=array  → use the deterministic seed-42 fixtures from
+#     Macro 4 onward; until then the value is ignored.
+env:
+  FLOW_ADMIN_MIDDLEWARE: web
+  FLOW_ADMIN_ADAPTER: array

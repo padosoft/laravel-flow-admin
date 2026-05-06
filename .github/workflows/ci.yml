@@ -199,36 +199,10 @@ jobs:
         if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
-      - name: Diagnostic — testbench route list + debug-on smoke
-        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.composer == 'true'
-        env:
-          FLOW_ADMIN_MIDDLEWARE: web
-          FLOW_ADMIN_ADAPTER: array
-          APP_DEBUG: 'true'
-          APP_ENV: local
-          APP_KEY: base64:ZmxvdwlhZG1pbmRlYnVnMTIzNDU2Nzg5MDEyMzQ1Ng==
-        run: |
-          echo "--- route:list ---"
-          php vendor/bin/testbench route:list || true
-          echo "--- serve + curl ---"
-          php vendor/bin/testbench serve --host=127.0.0.1 --port=8002 &
-          SERVE_PID=$!
-          sleep 5
-          curl -sS -o /tmp/flow-body.html -w "STATUS=%{http_code} TIME=%{time_total}\n" http://127.0.0.1:8002/flow || true
-          echo "--- body bytes ---"
-          wc -c /tmp/flow-body.html || true
-          echo "--- exception text (grep) ---"
-          grep -oE '<h1[^>]*>[^<]+</h1>|<title>[^<]+</title>|class="[^"]*exception[^"]*"|throw new [A-Za-z\\]+|<pre[^>]*>[^<]{0,800}' /tmp/flow-body.html | head -20 || true
-          echo "--- title + first <body> contents ---"
-          sed -n '/<body/,/<\/body>/p' /tmp/flow-body.html | head -c 3000 || true
-          echo "--- last 1500 bytes ---"
-          tail -c 1500 /tmp/flow-body.html || true
-          echo
-          kill $SERVE_PID 2>/dev/null || true
-
       - name: Run Playwright (${{ matrix.browser }})
         if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         env:
+          FLOW_ADMIN_MIDDLEWARE: web
           FLOW_ADMIN_ADAPTER: array
         run: npm run test:e2e -- --project=${{ matrix.browser }}
 
