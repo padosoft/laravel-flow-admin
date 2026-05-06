@@ -5,14 +5,18 @@
 
 ## Now / Next / Blocked
 
-- **Now**: Macro 4 (`task/read-model-adapter`) — subtask `read-model-2-eloquent`
-  in progress, covering:
-  4.2 `EloquentReadModel` + `ReadModel` contract,
-  4.3 `ArrayReadModel` + fixture integration,
-  4.4 `DashboardActionAuthorizer` contract/wrapper.
-- **Next**: Validate PR loop and merge macro 4 into `task/read-model-adapter`,
-  then open Macro 5 PR (`task/pages-overview-runs`).
-- **Blocked**: nothing.
+- **Now**: Completed local implementation sweep for Macro 4→10 scope on `subtask/read-model-2-eloquent`:
+  `ReadModel` contract + adapters, all page controllers/views, runtime API (`/flow/api/search`, `/flow/api/live`), Macro 8 interactions (⌘K, polling toggle, toasts), and Macro 9 docs/release files are present in working tree.
+- **Now (validated locally on 2026-05-06)**:
+  - `composer validate --strict --no-check-publish` ✅
+  - `composer format:test` ✅
+  - `composer analyse` ✅
+  - `composer test` ✅ (101 tests, 584 assertions)
+  - `npm run lint` ✅
+  - `npm run build` ✅
+  - `npm run test:e2e` ✅ (18 passed, 3 visual-gated skipped)
+- **Next**: execute the mandatory branch/PR loop by macro (subtask PRs → macro branches, then macro PRs → `main`) with Copilot reviewer and required CI checks.
+- **Blocked**: remote PR/CI/Copilot loop not executable in this local-only session.
 
 ## Macro 2 — DONE ✅
 
@@ -51,13 +55,13 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 | 1 | Agent Operating System | `task/agent-operating-system` | ✅ merged on main `f32ac2f` |
 | 2 | Baseline Tooling Laravel 13 | `task/baseline-tooling` | ✅ merged on main `1f5d0ed` |
 | 3 | Design System & Layout Shell | `task/design-system-shell` | ✅ merged on main `617e427` |
-| 4 | Read Model Adapter | `task/read-model-adapter` | in progress — subtasks 4.2/4.3/4.4 |
-| 5 | Pages — Overview & Runs | `task/pages-overview-runs` | not started |
-| 6 | Pages — Run Detail | `task/pages-run-detail` | not started |
-| 7 | Pages — Approvals/Outbox/Definitions/Settings | `task/pages-misc` | not started |
-| 8 | ⌘K Palette + Auto-refresh + Toasts | `task/cmdk-search` | not started |
-| 9 | Hardening, README, Release | `task/hardening-release` | not started |
-| 10 | Harvest LESSON.md → rules/skills | `task/lessons-harvest` | not started |
+| 4 | Read Model Adapter | `task/read-model-adapter` | implementation complete locally, PR loop pending |
+| 5 | Pages — Overview & Runs | `task/pages-overview-runs` | implementation complete locally, PR loop pending |
+| 6 | Pages — Run Detail | `task/pages-run-detail` | implementation complete locally, PR loop pending |
+| 7 | Pages — Approvals/Outbox/Definitions/Settings | `task/pages-misc` | implementation complete locally, PR loop pending |
+| 8 | ⌘K Palette + Auto-refresh + Toasts | `task/cmdk-search` | implementation complete locally, PR loop pending |
+| 9 | Hardening, README, Release | `task/hardening-release` | docs/release artifacts complete locally; remote release loop pending |
+| 10 | Harvest LESSON.md → rules/skills | `task/lessons-harvest` | lesson harvest file added locally; PR loop pending |
 
 ## Restart steps
 

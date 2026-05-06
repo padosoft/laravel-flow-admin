@@ -9,6 +9,7 @@ use DateTimeInterface;
 use DateTimeZone;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ApprovalSummary;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\AuditEvent;
+use Padosoft\LaravelFlowAdmin\Contracts\Dto\FlowDefinition;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\KpiSummary;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\OutboxEntry;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\RunDetail;
@@ -300,6 +301,78 @@ final class ArrayReadModel implements ReadModel
             deltaAvgDurationMs: (int) ($kpis['delta_avg_duration_ms'] ?? 0),
             p95DurationMs: (int) ($kpis['p95_duration_ms'] ?? 0),
         );
+    }
+
+    /**
+     * @return list<FlowDefinition>
+     */
+    public function definitions(): array
+    {
+        $definitions = [];
+
+        $runs = $this->runs();
+        $byDefinition = [];
+
+        foreach ($runs as $run) {
+            $flowId = (string) ($run['flow_def'] ?? '');
+            $flowName = (string) ($run['flow_name'] ?? $flowId);
+            $version = (string) ($run['version'] ?? 'v1.0');
+            $status = (string) ($run['status'] ?? 'pending');
+
+            if (! array_key_exists($flowId, $byDefinition)) {
+                $byDefinition[$flowId] = [
+                    'name' => $flowName,
+                    'version' => $version,
+                    'total' => 0,
+                    'success' => 0,
+                ];
+            }
+
+            $byDefinition[$flowId]['total']++;
+            if ($status === 'success') {
+                $byDefinition[$flowId]['success']++;
+            }
+        }
+
+        if (! empty($this->fixture['FLOW_DEFS'])) {
+            foreach ((array) $this->fixture['FLOW_DEFS'] as $definition) {
+                if (! is_array($definition) || ! isset($definition['id'])) {
+                    continue;
+                }
+
+                $flowId = (string) $definition['id'];
+                if (! array_key_exists($flowId, $byDefinition)) {
+                    $byDefinition[$flowId] = [
+                        'name' => (string) ($definition['name'] ?? $flowId),
+                        'version' => (string) ($definition['version'] ?? 'v1.0'),
+                        'total' => 0,
+                        'success' => 0,
+                    ];
+                }
+
+                $definitions[$flowId] = new FlowDefinition(
+                    name: $byDefinition[$flowId]['name'],
+                    version: $byDefinition[$flowId]['version'],
+                    stepCount: (int) ($definition['steps'] ?? 0),
+                    totalRuns: (int) $byDefinition[$flowId]['total'],
+                    successRate: $byDefinition[$flowId]['total'] > 0
+                        ? $byDefinition[$flowId]['success'] / $byDefinition[$flowId]['total']
+                        : 0.0,
+                );
+            }
+        } else {
+            foreach ($byDefinition as $flowId => $definition) {
+                $definitions[$flowId] = new FlowDefinition(
+                    name: (string) $definition['name'],
+                    version: (string) $definition['version'],
+                    stepCount: (int) 0,
+                    totalRuns: (int) $definition['total'],
+                    successRate: $definition['success'] / $definition['total'],
+                );
+            }
+        }
+
+        return array_values($definitions);
     }
 
     /**

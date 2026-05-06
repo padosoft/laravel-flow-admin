@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Padosoft\LaravelFlowAdmin\Contracts;
 
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ApprovalSummary;
+use Padosoft\LaravelFlowAdmin\Contracts\Dto\FlowDefinition;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\KpiSummary;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\OutboxEntry;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\RunDetail;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\RunSummary;
+use Padosoft\LaravelFlowAdmin\Contracts\Dto\ThroughputBucket;
 
 /**
  * Public surface for data sources used by admin pages and services.
@@ -53,4 +55,14 @@ interface ReadModel
     public function pendingWebhookOutbox(): array;
 
     public function kpis(): KpiSummary;
+
+    /**
+     * @return list<ThroughputBucket>
+     */
+    public function throughputBuckets(): array;
+
+    /**
+     * @return list<FlowDefinition>
+     */
+    public function definitions(): array;
 }

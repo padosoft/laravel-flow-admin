@@ -15,11 +15,13 @@ use Padosoft\LaravelFlow\Dashboard\RunDetail as DashboardRunDetail;
 use Padosoft\LaravelFlow\FlowRun;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ApprovalSummary;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\AuditEvent;
+use Padosoft\LaravelFlowAdmin\Contracts\Dto\FlowDefinition;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\KpiSummary;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\OutboxEntry;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\RunDetail;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\RunSummary;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\Step;
+use Padosoft\LaravelFlowAdmin\Contracts\Dto\ThroughputBucket;
 use Padosoft\LaravelFlowAdmin\Contracts\PaginatedResult;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
 
@@ -268,6 +270,74 @@ final readonly class EloquentReadModel implements ReadModel
             deltaAvgDurationMs: $duration['avg'] - $previousDuration['avg'],
             p95DurationMs: $duration['p95'],
         );
+    }
+
+    /**
+     * @return list<ThroughputBucket>
+     */
+    public function throughputBuckets(): array
+    {
+        /** @var list<object{bucket:string,success_count:int,failed_count:int}> $rows */
+        $rows = DB::table('flow_runs')
+            ->selectRaw("strftime('%Y-%m-%d %H:00:00', started_at) as bucket")
+            ->selectRaw('SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as success_count', [FlowRun::STATUS_SUCCEEDED])
+            ->selectRaw('SUM(CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END) as failed_count', [FlowRun::STATUS_FAILED, FlowRun::STATUS_ABORTED])
+            ->whereNotNull('started_at')
+            ->groupBy('bucket')
+            ->orderBy('bucket')
+            ->get()
+            ->all();
+
+        $result = [];
+        foreach ($rows as $row) {
+            $at = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', (string) $row->bucket, new DateTimeZone('UTC'));
+            if ($at === false) {
+                continue;
+            }
+
+            $result[] = new ThroughputBucket(
+                at: $at,
+                successCount: (int) $row->success_count,
+                failedCount: (int) $row->failed_count,
+            );
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return list<FlowDefinition>
+     */
+    public function definitions(): array
+    {
+        /** @var list<object{definition_name:string,total_runs:int,success_runs:int,step_count:int}> $rows */
+        $rows = DB::table('flow_runs')
+            ->leftJoin('flow_steps', 'flow_steps.run_id', '=', 'flow_runs.id')
+            ->selectRaw('flow_runs.definition_name as definition_name')
+            ->selectRaw('COUNT(DISTINCT flow_runs.id) as total_runs')
+            ->selectRaw('COUNT(DISTINCT CASE WHEN flow_runs.status = ? THEN flow_runs.id END) as success_runs', [FlowRun::STATUS_SUCCEEDED])
+            ->selectRaw('COUNT(flow_steps.id) as step_count')
+            ->groupBy('flow_runs.definition_name')
+            ->orderBy('flow_runs.definition_name')
+            ->get()
+            ->all();
+
+        $definitions = [];
+        foreach ($rows as $row) {
+            [$name, $version] = $this->splitFlowDefinition((string) $row->definition_name);
+            $totalRuns = (int) $row->total_runs;
+            $successRuns = (int) $row->success_runs;
+
+            $definitions[] = new FlowDefinition(
+                name: $name,
+                version: $version,
+                stepCount: (int) $row->step_count,
+                totalRuns: $totalRuns,
+                successRate: $totalRuns > 0 ? $successRuns / $totalRuns : 0.0,
+            );
+        }
+
+        return $definitions;
     }
 
     /**
