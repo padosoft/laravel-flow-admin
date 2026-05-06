@@ -11,11 +11,14 @@ class ServiceProviderTest extends TestCase
     public function test_config_is_loaded(): void
     {
         $this->assertNotNull(config('flow-admin'));
-        $this->assertSame('flow', config('flow-admin.prefix'));
-        $this->assertSame('dark', config('flow-admin.theme_default'));
-        $this->assertSame('timeline', config('flow-admin.step_viz_default'));
-        $this->assertSame('eloquent', config('flow-admin.adapter'));
-        $this->assertSame(4000, config('flow-admin.polling_interval_ms'));
+        // Assert the config keys exist rather than their env-driven default values,
+        // so tests do not break when contributors have FLOW_ADMIN_* env vars set locally.
+        $this->assertArrayHasKey('prefix', config('flow-admin'));
+        $this->assertArrayHasKey('middleware', config('flow-admin'));
+        $this->assertArrayHasKey('adapter', config('flow-admin'));
+        $this->assertArrayHasKey('polling_interval_ms', config('flow-admin'));
+        $this->assertArrayHasKey('theme_default', config('flow-admin'));
+        $this->assertArrayHasKey('step_viz_default', config('flow-admin'));
     }
 
     public function test_view_namespace_is_registered(): void
@@ -29,12 +32,13 @@ class ServiceProviderTest extends TestCase
     public function test_route_is_registered(): void
     {
         $routes = collect($this->app['router']->getRoutes()->getRoutes());
+        $prefix = config('flow-admin.prefix', 'flow');
 
-        $found = $routes->contains(function ($route) {
-            return str_starts_with($route->uri(), 'flow')
+        $found = $routes->contains(function ($route) use ($prefix) {
+            return $route->uri() === $prefix
                 && $route->getName() === 'flow-admin.overview';
         });
 
-        $this->assertTrue($found, 'Route [flow-admin.overview] must be registered');
+        $this->assertTrue($found, "Route [flow-admin.overview] with URI [{$prefix}] must be registered");
     }
 }
