@@ -5,20 +5,25 @@
 
 ## Now / Next / Blocked
 
-- **Now**: Macro 2 (`task/baseline-tooling`) closing — macro PR #11 to `main`
-  is open with Copilot review hotfix subtask in flight
-  (`subtask/baseline-2-macro-pr-fixes`).
-- **Next**: After Macro 2 PR #11 merges to `main` → Macro 3 Design System
-  on `task/design-system-shell`.
+- **Now**: Macro 3 (`task/design-system-shell`) — subtask 3.1 in flight on
+  `subtask/design-system-1-styles-port`: pixel-perfect port of
+  `.design-source/project/styles.css` (1208 lines) to
+  `resources/css/admin.css`, served at `/_flow-admin/assets/admin.css`.
+- **Next**: Subtask 3.2 — layout Blade shell + sidebar/topbar/breadcrumbs +
+  `x-flow-admin::icon` + theme cookie toggle. Then macro PR #?? → `main`,
+  then Macro 4 Read Model Adapter on `task/read-model-adapter`.
 - **Blocked**: nothing.
 
-## Macro 2 — closing (subtasks done, macro PR #11 in CI/Copilot loop)
+## Macro 2 — DONE ✅
+
+Squash-merged onto `main` at SHA `1f5d0ed` (macro PR #11).
 
 | PR | Type | Squash SHA |
 |----|------|------------|
 | #9 | subtask 2.1+2.2 (composer / phpunit / pint / phpstan / ServiceProvider skeleton + 13 tests) | `c83b7d9` on `task/baseline-tooling` |
 | #10 | subtask 2.3 (Vite + Alpine + ESLint 9 + Playwright 1.59 + testbench.yaml + 23 tests / 34 assertions) | `34d3ee0` on `task/baseline-tooling` |
-| #11 | macro → main | open — addressing Copilot hotfix round |
+| #12 | subtask review hotfix (7 Copilot threads on macro PR) | `c2d6ed1` on `task/baseline-tooling` |
+| #11 | macro → main | `1f5d0ed` on `main` |
 
 ## Macro 1 — DONE ✅
 
@@ -35,16 +40,16 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 
 | Branch | Base | Status |
 |--------|------|--------|
-| `task/baseline-tooling` | `main` | open (macro) — PR #11 in Copilot+CI loop |
-| `subtask/baseline-2-macro-pr-fixes` | `task/baseline-tooling` | open — addresses 3 Copilot threads on PR #11 |
+| `task/design-system-shell` | `main` | open (macro) — Macro 3 |
+| `subtask/design-system-2-layout-shell` | `task/design-system-shell` | in progress — layout shell + sidebar/topbar/breadcrumbs + icon component + theme toggle |
 
 ## Macro task status
 
 | # | Macro | Branch | State |
 |---|-------|--------|-------|
 | 1 | Agent Operating System | `task/agent-operating-system` | ✅ merged on main `f32ac2f` |
-| 2 | Baseline Tooling Laravel 13 | `task/baseline-tooling` | subtasks merged (`c83b7d9` + `34d3ee0`) — macro PR #11 closing |
-| 3 | Design System & Layout Shell | `task/design-system-shell` | not started |
+| 2 | Baseline Tooling Laravel 13 | `task/baseline-tooling` | ✅ merged on main `1f5d0ed` |
+| 3 | Design System & Layout Shell | `task/design-system-shell` | in progress — subtask 3.1 (styles port) |
 | 4 | Read Model Adapter | `task/read-model-adapter` | not started |
 | 5 | Pages — Overview & Runs | `task/pages-overview-runs` | not started |
 | 6 | Pages — Run Detail | `task/pages-run-detail` | not started |

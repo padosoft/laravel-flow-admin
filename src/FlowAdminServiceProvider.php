@@ -4,7 +4,12 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelFlowAdmin;
 
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\AdminCssController;
+use Padosoft\LaravelFlowAdmin\Http\Controllers\ThemeController;
 
 class FlowAdminServiceProvider extends ServiceProvider
 {
@@ -20,7 +25,28 @@ class FlowAdminServiceProvider extends ServiceProvider
     {
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'flow-admin');
 
+        // Register file-based (anonymous) Blade components under the
+        // `flow-admin` prefix. Templates use `<x-flow-admin::icon name="…" />`
+        // resolved from `resources/views/components/icon.blade.php`. The
+        // path-based registration (vs the class-based `componentNamespace`)
+        // keeps the design-system primitives template-only — no PHP class
+        // boilerplate per icon/badge/button.
+        Blade::anonymousComponentPath(
+            path: __DIR__ . '/../resources/views/components',
+            prefix: 'flow-admin',
+        );
+
         $this->loadRoutesFrom(__DIR__ . '/../routes/flow-admin.php');
+
+        $this->registerPackagedAssetRoutes();
+
+        // Exempt the theme-preference cookie from EncryptCookies. The
+        // value is `light` or `dark` (publicly knowable), and Macro 8
+        // wires up a JS theme-mirror in the ⌘K palette that reads
+        // `document.cookie`; an encrypted payload would break both
+        // assertions in tests and the runtime read. The cookie is also
+        // explicitly `httpOnly: false` for the same reason.
+        EncryptCookies::except(ThemeController::COOKIE_NAME);
 
         if ($this->app->runningInConsole()) {
             $this->publishes([
@@ -49,5 +75,42 @@ class FlowAdminServiceProvider extends ServiceProvider
                 ], 'flow-admin-assets');
             }
         }
+    }
+
+    /**
+     * Register a static asset route that serves the package's design-system
+     * stylesheet directly from `resources/css/admin.css`. The file is the
+     * pixel-perfect port of `.design-source/project/styles.css` and provides
+     * the design tokens (light + dark theme) consumed by every admin Blade
+     * template.
+     *
+     * The handler is an invokable controller (`AdminCssController`), NOT a
+     * closure: Laravel cannot serialise closures for `php artisan
+     * route:cache`, which is a common production optimisation in consumer
+     * apps. The controller form keeps the package route-cacheable and lets
+     * the cache headers (Last-Modified, must-revalidate, max-age=300)
+     * live in tested code rather than in this provider.
+     *
+     * Why a Laravel route instead of a Vite-built link tag:
+     * - Testbench's `serve` command does not expose this package's
+     *   `public/vendor/flow-admin/` build output through its public dir, so
+     *   the Vite hashed-asset URL is unreachable during E2E.
+     * - Consumer apps that have run `php artisan vendor:publish
+     *   --tag=flow-admin-assets` get the optimised hashed assets via the
+     *   normal Vite manifest at runtime; this fallback route is the
+     *   "always works" path that does not require a publish step.
+     * - The route is intentionally registered outside `routes/flow-admin.php`
+     *   so it does NOT inherit the admin middleware stack (`web,auth`):
+     *   stylesheets must be reachable for unauthenticated users too,
+     *   otherwise the login redirect would render unstyled.
+     *
+     * The route lives under `/_flow-admin/assets/{file}` — the underscore
+     * prefix marks it as a package-internal route, away from the
+     * user-facing `/flow` namespace.
+     */
+    private function registerPackagedAssetRoutes(): void
+    {
+        Route::get('/_flow-admin/assets/admin.css', AdminCssController::class)
+            ->name('flow-admin.assets.css');
     }
 }
