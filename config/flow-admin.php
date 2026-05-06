@@ -17,12 +17,22 @@ return [
     |--------------------------------------------------------------------------
     | Applied to every admin route. Require auth in production by default.
     | Override with FLOW_ADMIN_MIDDLEWARE="web,auth,verified" or similar.
-    | An empty value disables the middleware stack (useful for E2E smoke tests).
+    |
+    | If the env value is empty, whitespace-only, or resolves to no entries
+    | after trim/filter, we fall back to ['web']. We never ship an empty
+    | middleware array: that would silently disable session, CSRF, and the
+    | session-driven authenticator on the admin routes — a footgun for
+    | operators who set FLOW_ADMIN_MIDDLEWARE="" thinking they were disabling
+    | only `auth`.
     */
-    'middleware' => array_values(array_filter(array_map(
-        'trim',
-        explode(',', (string) env('FLOW_ADMIN_MIDDLEWARE', 'web,auth')),
-    ))),
+    'middleware' => (function (): array {
+        $resolved = array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('FLOW_ADMIN_MIDDLEWARE', 'web,auth')),
+        ), static fn (string $name): bool => $name !== ''));
+
+        return $resolved !== [] ? $resolved : ['web'];
+    })(),
 
     /*
     |--------------------------------------------------------------------------

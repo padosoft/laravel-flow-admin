@@ -34,7 +34,7 @@ Local PowerShell gate (Windows):
 
 Files added/changed in this subtask:
 
-- `package.json` (Vite 5 / Alpine 3 / ESLint 9 / Playwright 1.49 — root level so CI `frontend` job picks it up)
+- `package.json` (Vite 5 / Alpine 3 / ESLint 9 / Playwright 1.59 — root level so CI `frontend` job picks it up)
 - `package-lock.json` (committed for reproducible `npm ci`)
 - `eslint.config.js` (flat config — required by ESLint 9)
 - `vite.config.js` (input: `resources/js/admin.js` + `resources/css/admin.css`, output: `public/vendor/flow-admin/`)

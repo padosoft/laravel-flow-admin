@@ -19,8 +19,29 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
 const testbench = resolve(repoRoot, 'vendor/bin/testbench');
 
-const port = process.env.FLOW_ADMIN_E2E_PORT ?? '8001';
-const host = process.env.FLOW_ADMIN_E2E_HOST ?? '127.0.0.1';
+// Single source of truth: when FLOW_ADMIN_E2E_BASE_URL is set, derive host
+// and port from it so the webServer Playwright polls (`url`) and the
+// PHP-built-in server we spawn here listen on the same address. Without this,
+// pointing Playwright at e.g. `http://0.0.0.0:9999` while the script kept
+// binding to 127.0.0.1:8001 produced an unreachable webServer that never
+// became ready (Codex P2 review on PR #10, 2026-05-06).
+let host = process.env.FLOW_ADMIN_E2E_HOST ?? '127.0.0.1';
+let port = process.env.FLOW_ADMIN_E2E_PORT ?? '8001';
+
+const baseUrl = process.env.FLOW_ADMIN_E2E_BASE_URL;
+if (typeof baseUrl === 'string' && baseUrl.length > 0) {
+  try {
+    const parsed = new URL(baseUrl);
+    host = parsed.hostname || host;
+    port = parsed.port || port;
+  } catch (error) {
+    console.error(
+      `[serve-testbench] FLOW_ADMIN_E2E_BASE_URL=${baseUrl} is not a valid URL; ` +
+        `falling back to FLOW_ADMIN_E2E_HOST=${host} FLOW_ADMIN_E2E_PORT=${port}.`,
+      error,
+    );
+  }
+}
 
 if (!existsSync(testbench)) {
   console.error(
