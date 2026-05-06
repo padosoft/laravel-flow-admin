@@ -17,7 +17,7 @@ final readonly class AuditEvent
     /**
      * @param  string  $type  Event slug (`run.started`, `step.failed`, `approval.granted`, …).
      * @param  string  $actor  Identifier of the principal that emitted the event.
-     * @param  array<string, mixed>  $payload  Free-form payload, MUST be JSON-serialisable.
+     * @param  array<string|int, mixed>  $payload  Free-form payload, MUST be JSON-serialisable.
      */
     public function __construct(
         public DateTimeImmutable $at,

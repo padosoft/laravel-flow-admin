@@ -205,3 +205,9 @@ Copilot must-fix comments instead of 5–6.
 When Copilot flags a new recurring footgun on any Padosoft / lopadova
 repo, append it to the relevant section of this checklist in a follow-
 up PR. The checklist grows by experience.
+
+### J — UI runtime drift checks (macro8)
+
+- [ ] If a placeholder page/title was replaced, update smoke/e2e textual assertions (`h1`, breadcrumbs, labels).
+- [ ] For keyboard/runtime features (`Ctrl+K`, polling toggle, toast), ensure there is at least one interaction e2e spec.
+- [ ] For dashboard pages used in shell/theme tests, make sure missing migrations do not crash baseline feature routes.

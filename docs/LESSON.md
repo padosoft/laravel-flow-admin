@@ -171,3 +171,28 @@ CI runs on Linux so it always takes the POSIX branch — Windows quirks never re
 - Trigger CI on `push: [main]` + `pull_request: [main, 'task/**']`. Push triggers stay narrow; PR triggers cover both subtask→macro and macro→main flows.
 
 **How to apply:** copy the workflow trigger pattern verbatim from `padosoft-laravel-flow/.github/workflows/ci.yml`. Do not "improve" the trigger to include subtask branch pushes — that pattern was burned in twice.
+
+## 2026-05-06 — Macro 8 runtime + shell resilience
+
+### Polling toast assertion should target the newest toast, not the first toast in stack
+
+- Runtime boot emits an initial informational toast (`Flow Admin ready`). The polling toggle emits subsequent toasts (`Auto-refresh paused/resumed`).
+- The original E2E assertion in `tests/e2e/macro8-runtime.spec.js` used `#flow-toast-stack .toast:first`, which is unstable because the oldest toast can remain present while new toasts append.
+- This caused cross-browser failures even though the feature worked, because the assertion kept reading the bootstrap toast text.
+
+**How to apply:** in toast-stack assertions, target the most recent toast (`.last()` in Playwright) when validating a newly triggered interaction toast. Keep this for any future queue-style UI notifications.
+
+### Overview route must tolerate missing `flow_*` tables in lightweight shell tests
+
+- Once overview became data-driven, baseline feature tests that only verify shell/theme started failing with `no such table: flow_runs` on in-memory DB contexts that intentionally do not run flow migrations.
+- Controller-level guarded fallback (`safe(callable, default)`) preserves shell rendering for those tests while still using full read-model data when tables are present.
+
+### Smoke test copy can drift after replacing placeholders
+
+- Legacy smoke asserted `h1 = Flow Admin` from the early stub page.
+- After implementing the real overview page title, the expected text must be updated or the suite reports false regressions.
+
+### Macro 8 must be validated by interaction tests, not only static render checks
+
+- Added e2e coverage for keyboard palette open (`Ctrl+K`) and live polling pause/resume feedback.
+- This catches regressions in runtime wiring that static visual tests do not detect.

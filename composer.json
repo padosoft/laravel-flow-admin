@@ -17,8 +17,15 @@
         "illuminate/http": "^13.0",
         "illuminate/routing": "^13.0",
         "illuminate/support": "^13.0",
-        "illuminate/view": "^13.0"
+        "illuminate/view": "^13.0",
+        "padosoft/laravel-flow": "^1.0"
     },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/padosoft/laravel-flow.git"
+        }
+    ],
     "require-dev": {
         "orchestra/testbench": "^11.0",
         "phpunit/phpunit": "^11.0",

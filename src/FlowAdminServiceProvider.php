@@ -8,6 +8,12 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Padosoft\LaravelFlow\Dashboard\FlowDashboardReadModel;
+use Padosoft\LaravelFlowAdmin\Adapters\ArrayReadModel;
+use Padosoft\LaravelFlowAdmin\Adapters\EloquentReadModel;
+use Padosoft\LaravelFlowAdmin\Authorizers\DenyAllAuthorizer;
+use Padosoft\LaravelFlowAdmin\Contracts\ActionAuthorizer;
+use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\AdminCssController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\ThemeController;
 
@@ -19,6 +25,44 @@ class FlowAdminServiceProvider extends ServiceProvider
             __DIR__ . '/../config/flow-admin.php',
             'flow-admin'
         );
+
+        $this->app->singleton(FlowDashboardReadModel::class, function (): FlowDashboardReadModel {
+            return new FlowDashboardReadModel;
+        });
+
+        $this->app->singleton(EloquentReadModel::class, function ($app): EloquentReadModel {
+            return new EloquentReadModel($app->make(FlowDashboardReadModel::class));
+        });
+
+        $this->app->singleton(ReadModel::class, function ($app): ReadModel {
+            $adapter = (string) $app->make('config')->get('flow-admin.adapter', 'eloquent');
+            $arrayAdapter = ArrayReadModel::class;
+
+            if (strtolower($adapter) === 'array' && class_exists($arrayAdapter)) {
+                return $app->make($arrayAdapter);
+            }
+
+            return $app->make(EloquentReadModel::class);
+        });
+
+        $this->app->singleton(ActionAuthorizer::class, function ($app): ActionAuthorizer {
+            $authorizerClass = $app->make('config')->get(
+                'flow-admin.authorizer',
+                DenyAllAuthorizer::class,
+            );
+
+            if (! is_string($authorizerClass) || ! class_exists($authorizerClass)) {
+                return new DenyAllAuthorizer;
+            }
+
+            /** @var class-string<ActionAuthorizer> $authorizerClass */
+            $authorizer = $app->make($authorizerClass);
+            if (! $authorizer instanceof ActionAuthorizer) {
+                return new DenyAllAuthorizer;
+            }
+
+            return $authorizer;
+        });
     }
 
     public function boot(): void

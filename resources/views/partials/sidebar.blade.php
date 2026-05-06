@@ -15,15 +15,15 @@
     $counts = $counts ?? [];
 
     $primary = [
-        ['key' => 'home',        'label' => 'Overview',    'icon' => 'home',        'badge' => null],
-        ['key' => 'runs',        'label' => 'Runs',        'icon' => 'runs',        'badge' => $counts['running']   ?? null],
-        ['key' => 'approvals',   'label' => 'Approvals',   'icon' => 'approvals',   'badge' => $counts['approvals'] ?? null],
-        ['key' => 'outbox',      'label' => 'Outbox',      'icon' => 'outbox',      'badge' => $counts['outbox']    ?? null],
+        ['key' => 'home',        'label' => 'Overview',    'icon' => 'home',        'badge' => null,                        'url' => route('flow-admin.overview')],
+        ['key' => 'runs',        'label' => 'Runs',        'icon' => 'runs',        'badge' => $counts['running']   ?? null, 'url' => route('flow-admin.runs.index')],
+        ['key' => 'approvals',   'label' => 'Approvals',   'icon' => 'approvals',   'badge' => $counts['approvals'] ?? null, 'url' => route('flow-admin.approvals.index')],
+        ['key' => 'outbox',      'label' => 'Outbox',      'icon' => 'outbox',      'badge' => $counts['outbox']    ?? null, 'url' => route('flow-admin.outbox.index')],
     ];
 
     $secondary = [
-        ['key' => 'definitions', 'label' => 'Definitions', 'icon' => 'definitions'],
-        ['key' => 'settings',    'label' => 'Settings',    'icon' => 'settings'],
+        ['key' => 'definitions', 'label' => 'Definitions', 'icon' => 'definitions', 'url' => route('flow-admin.definitions.index')],
+        ['key' => 'settings',    'label' => 'Settings',    'icon' => 'settings',    'url' => route('flow-admin.settings.index')],
     ];
 @endphp
 <aside class="sidebar" data-testid="flow-admin-sidebar">
@@ -39,7 +39,7 @@
             <div class="nav-label">Operate</div>
             @foreach ($primary as $item)
                 <a @class(['nav-item', 'active' => $route === $item['key']])
-                   href="{{ route('flow-admin.overview') }}"
+                   href="{{ $item['url'] }}"
                    data-route-key="{{ $item['key'] }}">
                     <x-flow-admin::icon :name="$item['icon']" size="15" />
                     <span>{{ $item['label'] }}</span>
@@ -53,7 +53,7 @@
             <div class="nav-label">Configure</div>
             @foreach ($secondary as $item)
                 <a @class(['nav-item', 'active' => $route === $item['key']])
-                   href="{{ route('flow-admin.overview') }}"
+                   href="{{ $item['url'] }}"
                    data-route-key="{{ $item['key'] }}">
                     <x-flow-admin::icon :name="$item['icon']" size="15" />
                     <span>{{ $item['label'] }}</span>

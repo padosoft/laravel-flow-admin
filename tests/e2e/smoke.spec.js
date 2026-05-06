@@ -7,6 +7,6 @@ test.describe('flow-admin baseline smoke', () => {
     expect(response, 'GET /flow returned a response').not.toBeNull();
     expect(response?.status(), 'GET /flow returns 200').toBe(200);
     expect(page.url()).toContain('/flow');
-    await expect(page.locator('h1')).toContainText('Flow Admin');
+    await expect(page.locator('h1')).toContainText('Overview');
   });
 });

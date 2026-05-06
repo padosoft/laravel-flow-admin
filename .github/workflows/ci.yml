@@ -54,7 +54,7 @@ jobs:
           fi
 
       - name: Run Pint (style check)
-        if: hashFiles('composer.json') != ''
+        if: hashFiles('composer.json') != '' && matrix.php == '8.4'
         run: composer format:test
 
       - name: Run PHPStan
