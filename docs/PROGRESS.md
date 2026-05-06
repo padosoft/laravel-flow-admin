@@ -5,8 +5,7 @@
 
 ## Now / Next / Blocked
 
-- **Now**: Completed local implementation sweep for Macro 4→10 scope on `subtask/read-model-2-eloquent`:
-  `ReadModel` contract + adapters, all page controllers/views, runtime API (`/flow/api/search`, `/flow/api/live`), Macro 8 interactions (⌘K, polling toggle, toasts), and Macro 9 docs/release files are present in working tree.
+- **Now**: roadmap implementation merged to `main` via macro PR #20 (`task/read-model-adapter` → `main`, merge SHA `2c80d11`).
 - **Now (validated locally on 2026-05-06)**:
   - `composer validate --strict --no-check-publish` ✅
   - `composer format:test` ✅
@@ -15,12 +14,9 @@
   - `npm run lint` ✅
   - `npm run build` ✅
   - `npm run test:e2e` ✅ (18 passed, 3 visual-gated skipped)
-- **Now**: follow-up hardening fixes applied on `subtask/read-model-2-eloquent`:
-  - `ArrayReadModel` now merges defaults + disk fixture + constructor fixture (constructor fixture has precedence).
-  - `Authorize` now logs sanitized `actor/context` and obfuscated token hashes.
-  - `EloquentReadModel` removed `Padosoft\LaravelFlow\FlowRun` dependency and now uses local status constants.
-- **Next**: push latest hardening commit on PR #19, then complete mandatory Copilot review gate and merge subtask into `task/read-model-adapter`.
-- **Blocked**: none locally; remote step remains waiting for Copilot review activity on PR #19.
+- **Now**: PR #19 (subtask) and PR #20 (macro) are both merged with all required CI checks green.
+- **Next**: publish release tags and move to maintenance (dependabot/security follow-up PRs still open).
+- **Blocked**: none.
 
 ## Macro 2 — DONE ✅
 
@@ -48,9 +44,9 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 
 | Branch | Base | Status |
 |--------|------|--------|
-| `task/read-model-adapter` | `main` | open (macro) — Macro 4 |
-| `subtask/read-model-1-viewmodels` | `task/read-model-adapter` | done (PR #18 merged) |
-| `subtask/read-model-2-eloquent` | `task/read-model-adapter` | in progress — `ReadModel` contract, `EloquentReadModel`, `ArrayReadModel`, `ActionAuthorizer` + tests |
+| `main` | n/a | active release branch |
+| `task/read-model-adapter` | `main` | merged via PR #20 |
+| `subtask/read-model-2-eloquent` | `task/read-model-adapter` | merged via PR #19 |
 
 ## Macro task status
 
@@ -59,13 +55,13 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 | 1 | Agent Operating System | `task/agent-operating-system` | ✅ merged on main `f32ac2f` |
 | 2 | Baseline Tooling Laravel 13 | `task/baseline-tooling` | ✅ merged on main `1f5d0ed` |
 | 3 | Design System & Layout Shell | `task/design-system-shell` | ✅ merged on main `617e427` |
-| 4 | Read Model Adapter | `task/read-model-adapter` | implementation complete locally, PR loop pending |
-| 5 | Pages — Overview & Runs | `task/pages-overview-runs` | implementation complete locally, PR loop pending |
-| 6 | Pages — Run Detail | `task/pages-run-detail` | implementation complete locally, PR loop pending |
-| 7 | Pages — Approvals/Outbox/Definitions/Settings | `task/pages-misc` | implementation complete locally, PR loop pending |
-| 8 | ⌘K Palette + Auto-refresh + Toasts | `task/cmdk-search` | implementation complete locally, PR loop pending |
-| 9 | Hardening, README, Release | `task/hardening-release` | docs/release artifacts complete locally; remote release loop pending |
-| 10 | Harvest LESSON.md → rules/skills | `task/lessons-harvest` | lesson harvest file added locally; PR loop pending |
+| 4 | Read Model Adapter | `task/read-model-adapter` | ✅ merged on main `2c80d11` |
+| 5 | Pages — Overview & Runs | `task/pages-overview-runs` | ✅ delivered in `2c80d11` |
+| 6 | Pages — Run Detail | `task/pages-run-detail` | ✅ delivered in `2c80d11` |
+| 7 | Pages — Approvals/Outbox/Definitions/Settings | `task/pages-misc` | ✅ delivered in `2c80d11` |
+| 8 | ⌘K Palette + Auto-refresh + Toasts | `task/cmdk-search` | ✅ delivered in `2c80d11` |
+| 9 | Hardening, README, Release | `task/hardening-release` | ✅ docs/release artifacts merged |
+| 10 | Harvest LESSON.md → rules/skills | `task/lessons-harvest` | ✅ lesson harvest merged |
 
 ## Restart steps
 
