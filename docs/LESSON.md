@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-05-06 — Subtask 2.3 Playwright CI green-up
+
+### `vendor/bin/testbench serve` does NOT auto-discover the host package's providers
+
+- `extra.laravel.providers` in the host package's `composer.json` is the discovery contract for **consumer** Laravel apps that depend on the package — not for the package's own dev-time Testbench server.
+- Without a `testbench.yaml` at the repo root, `vendor/bin/testbench serve` boots the bundled Testbench Laravel app with **zero** of the host package's providers registered. Routes from `routes/flow-admin.php` never load and `/flow` returns 404 — even though PHPUnit Feature tests pass (those use `getPackageProviders()` on the test case).
+- The CI symptom is misleading: Playwright sees /flow returning 404 fast, our pre-Playwright-1.50 versions retry until webServer.timeout fires (`Timed out waiting 120000ms from config.webServer.`), and the report blames the webServer instead of the actual route registration miss.
+
+**How to apply:** every package that runs `vendor/bin/testbench serve` for E2E (or local DX) ships a `testbench.yaml` at the repo root explicitly listing the package providers:
+```yaml
+laravel: '@testbench'
+providers:
+  - Padosoft\LaravelFlowAdmin\FlowAdminServiceProvider
+```
+This is independent from `extra.laravel.providers` (which serves consumer apps) and from `tests/TestCase.php::getPackageProviders()` (which serves PHPUnit). Without all three the package is not actually wired in any of the three contexts.
+
+### Vite `outDir` inside `publicDir` causes infinite recursive copy on Windows
+
+- Default Vite config copies `publicDir` (default `public/`) into `outDir`. If `outDir` is `public/vendor/flow-admin`, the copy nests `public/vendor/flow-admin/vendor/flow-admin/...` on every build until the path exceeds Windows' MAX_PATH (260) and the build either crashes with `ENOTEMPTY` or silently wedges on the next run.
+- Once the deep tree exists, `Remove-Item -Recurse` and `cmd /c rmdir /s /q` both fail because the path is too long even for the long-path `\\?\` prefix in some PowerShell builds. The reliable cleanup is `robocopy <empty-dir> public/vendor /MIR` followed by `Remove-Item public/vendor`.
+
+**How to apply:** when the Vite output lives inside `public/`, set `publicDir: false` on the root config (or `build.copyPublicDir: false`). This package does not use a separate static-public source tree — all assets are emitted into `outDir` from `resources/`, so disabling the copy is correct. Document the why in a comment on the config so a future contributor does not reintroduce the recursion by adding a `public/static-stuff/` folder and re-enabling `publicDir`.
+
+---
+
 ## 2026-05-06 — Subtask 2.3 Playwright web-server cross-platform launcher
 
 ### Node `spawn('php', …)` on Windows fails for two compounding reasons
