@@ -18,6 +18,15 @@ abstract class TestCase extends BaseTestCase
 
     protected function defineEnvironment($app): void
     {
+        // The `web` middleware group includes `EncryptCookies` and
+        // `StartSession`, both of which require APP_KEY at request time.
+        // Testbench's bundled .env carries one for `serve`, but PHPUnit
+        // does not load that .env, so without an explicit key the entire
+        // Feature suite fails with `MissingAppKeyException`. The value
+        // is a deterministic 32-byte test key — never a real secret;
+        // exactly 32 bytes is required by AES-256-CBC.
+        $app['config']->set('app.key', 'base64:'.base64_encode(str_pad('flowadmin-test', 32, '_')));
+
         $app['config']->set('database.default', 'sqlite');
         $app['config']->set('database.connections.sqlite', [
             'driver' => 'sqlite',
