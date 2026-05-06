@@ -173,7 +173,7 @@ final class EloquentReadModelTest extends TestCase
     {
         $runId = $this->seedRun(['id' => 'run-approvals']);
 
-        $oldest = new DateTimeImmutable('now', new DateTimeZone(self::UTC))->sub(new DateInterval('P1D'))->setTime(8, 0);
+        $oldest = (new DateTimeImmutable('now', new DateTimeZone(self::UTC)))->sub(new DateInterval('P1D'))->setTime(8, 0);
         $middle = $oldest->add(new DateInterval('PT1H'));
         $newest = $oldest->add(new DateInterval('PT2H'));
 
@@ -470,7 +470,7 @@ final class EloquentReadModelTest extends TestCase
 
     private function tsMinutesAgo(int $minutes): DateTimeImmutable
     {
-        return new DateTimeImmutable('now', new DateTimeZone(self::UTC))->sub(new DateInterval(sprintf('PT%dM', $minutes)));
+        return (new DateTimeImmutable('now', new DateTimeZone(self::UTC)))->sub(new DateInterval(sprintf('PT%dM', $minutes)));
     }
 
     private function asTimestamp(?DateTimeInterface $date): ?string
