@@ -475,6 +475,10 @@ final class EloquentReadModelTest extends TestCase
 
     private function asTimestamp(?DateTimeInterface $date): ?string
     {
-        return $date?->setTimezone(new DateTimeZone(self::UTC))->format('Y-m-d H:i:s');
+        if ($date === null) {
+            return null;
+        }
+
+        return $date->setTimezone(new DateTimeZone(self::UTC))->format('Y-m-d H:i:s');
     }
 }
