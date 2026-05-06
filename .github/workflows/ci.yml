@@ -199,23 +199,24 @@ jobs:
         if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
-      - name: Diagnostic — testbench route list (verify provider registration)
+      - name: Diagnostic — testbench route list + debug-on smoke
         if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.composer == 'true'
         env:
           FLOW_ADMIN_MIDDLEWARE: web
           FLOW_ADMIN_ADAPTER: array
+          APP_DEBUG: 'true'
+          APP_ENV: local
+          APP_KEY: base64:ZmxvdwlhZG1pbmRlYnVnMTIzNDU2Nzg5MDEyMzQ1Ng==
         run: |
-          echo "--- testbench.yaml ---"
-          cat testbench.yaml || echo "(missing)"
           echo "--- route:list ---"
           php vendor/bin/testbench route:list || true
-          echo "--- curl smoke ---"
+          echo "--- serve + curl ---"
           php vendor/bin/testbench serve --host=127.0.0.1 --port=8002 &
           SERVE_PID=$!
           sleep 5
           curl -sS -o /tmp/flow-body.html -w "STATUS=%{http_code} TIME=%{time_total}\n" http://127.0.0.1:8002/flow || true
-          echo "--- body (first 500 bytes) ---"
-          head -c 500 /tmp/flow-body.html || true
+          echo "--- body (full) ---"
+          cat /tmp/flow-body.html | head -c 4000 || true
           echo
           kill $SERVE_PID 2>/dev/null || true
 
