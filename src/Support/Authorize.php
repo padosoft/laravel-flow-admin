@@ -62,8 +62,8 @@ final class Authorize
         if (! $allowed) {
             Log::warning('flow-admin authorization denied', [
                 'action' => $action,
-                'actor' => $actor,
-                'context' => $context,
+                'actor' => self::safeActor($actor),
+                'context' => self::safeContext($context),
             ]);
 
             throw new HttpException(403, 'Action not authorized');
@@ -71,10 +71,75 @@ final class Authorize
 
         Log::info('flow-admin authorization granted', [
             'action' => $action,
-            'actor' => $actor,
-            'context' => $context,
+            'actor' => self::safeActor($actor),
+            'context' => self::safeContext($context),
         ]);
 
         return $operation();
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $actor
+     * @return array<string, mixed>
+     */
+    private static function safeActor(?array $actor): array
+    {
+        if ($actor === null) {
+            return [];
+        }
+
+        $safe = [];
+        foreach (['id', 'type', 'role'] as $key) {
+            if (! array_key_exists($key, $actor)) {
+                continue;
+            }
+
+            $value = $actor[$key];
+            if (is_scalar($value) || $value === null) {
+                $safe[$key] = $value;
+            }
+        }
+
+        return $safe;
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     * @return array<string, scalar|null>
+     */
+    private static function safeContext(array $context): array
+    {
+        $safe = [];
+
+        foreach (['runId', 'run_id', 'outboxId', 'outbox_id'] as $key) {
+            if (! array_key_exists($key, $context)) {
+                continue;
+            }
+
+            $value = $context[$key];
+            if (is_scalar($value) || $value === null) {
+                $safe[$key] = $value;
+            }
+        }
+
+        if (array_key_exists('tokenHash', $context) || array_key_exists('token_hash', $context)) {
+            $tokenHash = (string) ($context['tokenHash'] ?? $context['token_hash'] ?? '');
+            $safe['token_hash'] = self::obfuscate($tokenHash);
+        }
+
+        return $safe;
+    }
+
+    private static function obfuscate(string $value): string
+    {
+        if ($value === '') {
+            return '';
+        }
+
+        if (strlen($value) <= 8) {
+            return str_repeat('*', strlen($value));
+        }
+
+        return substr($value, 0, 4) . '...' . substr($value, -4);
     }
 }

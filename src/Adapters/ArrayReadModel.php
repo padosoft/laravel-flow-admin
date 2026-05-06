@@ -389,19 +389,23 @@ final class ArrayReadModel implements ReadModel
      */
     private function normalizeFixture(array $fixture): array
     {
-        if ($this->path !== '' && $fixture === []) {
-            $loaded = $this->loadFixtureFromDisk();
-            if ($loaded !== null) {
-                return $loaded;
-            }
-        }
-
-        return [
+        $defaults = [
             'FLOW_DEFS' => [],
             'RUNS' => [],
             'HOURLY' => [],
             'KPIS' => [],
         ];
+
+        $diskFixture = null;
+        if ($this->path !== '') {
+            $diskFixture = $this->loadFixtureFromDisk();
+        }
+
+        if (is_array($diskFixture)) {
+            return array_replace($defaults, $diskFixture, $fixture);
+        }
+
+        return array_replace($defaults, $fixture);
     }
 
     /**

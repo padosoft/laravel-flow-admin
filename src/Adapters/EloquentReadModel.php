@@ -12,7 +12,6 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Padosoft\LaravelFlow\Dashboard\FlowDashboardReadModel;
 use Padosoft\LaravelFlow\Dashboard\RunDetail as DashboardRunDetail;
-use Padosoft\LaravelFlow\FlowRun;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ApprovalSummary;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\AuditEvent;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\FlowDefinition;
@@ -27,6 +26,14 @@ use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
 
 final readonly class EloquentReadModel implements ReadModel
 {
+    private const STATUS_PENDING = 'pending';
+
+    private const STATUS_SUCCEEDED = 'succeeded';
+
+    private const STATUS_FAILED = 'failed';
+
+    private const STATUS_ABORTED = 'aborted';
+
     public function __construct(
         private FlowDashboardReadModel $reader,
     ) {}
@@ -184,7 +191,7 @@ final readonly class EloquentReadModel implements ReadModel
 
         /** @var list<array<string, mixed>> $rows */
         $rows = DB::table('flow_approvals')
-            ->where('status', FlowRun::STATUS_PENDING)
+            ->where('status', self::STATUS_PENDING)
             ->orderBy('created_at')
             ->orderBy('id')
             ->limit($limit)
@@ -235,7 +242,7 @@ final readonly class EloquentReadModel implements ReadModel
     {
         /** @var list<array<string, mixed>> $rows */
         $rows = DB::table('flow_webhook_outbox')
-            ->whereIn('status', [FlowRun::STATUS_PENDING, 'delivering'])
+            ->whereIn('status', [self::STATUS_PENDING, 'delivering'])
             ->orderByDesc('id')
             ->get()
             ->map(static fn (object $row): array => (array) $row)
@@ -280,8 +287,8 @@ final readonly class EloquentReadModel implements ReadModel
         /** @var list<object{bucket:string,success_count:int,failed_count:int}> $rows */
         $rows = DB::table('flow_runs')
             ->selectRaw("strftime('%Y-%m-%d %H:00:00', started_at) as bucket")
-            ->selectRaw('SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as success_count', [FlowRun::STATUS_SUCCEEDED])
-            ->selectRaw('SUM(CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END) as failed_count', [FlowRun::STATUS_FAILED, FlowRun::STATUS_ABORTED])
+            ->selectRaw('SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as success_count', [self::STATUS_SUCCEEDED])
+            ->selectRaw('SUM(CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END) as failed_count', [self::STATUS_FAILED, self::STATUS_ABORTED])
             ->whereNotNull('started_at')
             ->groupBy('bucket')
             ->orderBy('bucket')
@@ -315,7 +322,7 @@ final readonly class EloquentReadModel implements ReadModel
             ->leftJoin('flow_steps', 'flow_steps.run_id', '=', 'flow_runs.id')
             ->selectRaw('flow_runs.definition_name as definition_name')
             ->selectRaw('COUNT(DISTINCT flow_runs.id) as total_runs')
-            ->selectRaw('COUNT(DISTINCT CASE WHEN flow_runs.status = ? THEN flow_runs.id END) as success_runs', [FlowRun::STATUS_SUCCEEDED])
+            ->selectRaw('COUNT(DISTINCT CASE WHEN flow_runs.status = ? THEN flow_runs.id END) as success_runs', [self::STATUS_SUCCEEDED])
             ->selectRaw('COUNT(flow_steps.id) as step_count')
             ->groupBy('flow_runs.definition_name')
             ->orderBy('flow_runs.definition_name')
@@ -351,10 +358,10 @@ final readonly class EloquentReadModel implements ReadModel
 
         $total = (clone $rows)->count('id');
         $failed = (clone $rows)
-            ->whereIn('status', [FlowRun::STATUS_FAILED, FlowRun::STATUS_ABORTED])
+            ->whereIn('status', [self::STATUS_FAILED, self::STATUS_ABORTED])
             ->count('id');
         $success = (clone $rows)
-            ->where('status', FlowRun::STATUS_SUCCEEDED)
+            ->where('status', self::STATUS_SUCCEEDED)
             ->count('id');
 
         return [
@@ -402,7 +409,7 @@ final readonly class EloquentReadModel implements ReadModel
             id: (string) $this->rowValue($run, 'id', ''),
             flowName: $parts[0],
             flowVersion: $parts[1],
-            status: $this->toPublicStatus((string) $this->rowValue($run, 'status', FlowRun::STATUS_PENDING)),
+            status: $this->toPublicStatus((string) $this->rowValue($run, 'status', self::STATUS_PENDING)),
             actor: $actor,
             correlationId: $correlationId,
             startedAt: $this->immutableDate($this->rowValue($run, 'started_at')) ?? new DateTimeImmutable,
@@ -502,8 +509,8 @@ final readonly class EloquentReadModel implements ReadModel
         }
 
         return match ($status) {
-            'success' => FlowRun::STATUS_SUCCEEDED,
-            'failed' => [FlowRun::STATUS_FAILED, FlowRun::STATUS_ABORTED],
+            'success' => self::STATUS_SUCCEEDED,
+            'failed' => [self::STATUS_FAILED, self::STATUS_ABORTED],
             default => $status,
         };
     }
@@ -511,8 +518,8 @@ final readonly class EloquentReadModel implements ReadModel
     private function toPublicStatus(string $status): string
     {
         return match ($status) {
-            FlowRun::STATUS_SUCCEEDED => 'success',
-            FlowRun::STATUS_ABORTED => 'failed',
+            self::STATUS_SUCCEEDED => 'success',
+            self::STATUS_ABORTED => 'failed',
             default => $status,
         };
     }

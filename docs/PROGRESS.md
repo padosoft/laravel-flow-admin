@@ -15,8 +15,12 @@
   - `npm run lint` ✅
   - `npm run build` ✅
   - `npm run test:e2e` ✅ (18 passed, 3 visual-gated skipped)
-- **Next**: execute the mandatory branch/PR loop by macro (subtask PRs → macro branches, then macro PRs → `main`) with Copilot reviewer and required CI checks.
-- **Blocked**: remote PR/CI/Copilot loop not executable in this local-only session.
+- **Now**: follow-up hardening fixes applied on `subtask/read-model-2-eloquent`:
+  - `ArrayReadModel` now merges defaults + disk fixture + constructor fixture (constructor fixture has precedence).
+  - `Authorize` now logs sanitized `actor/context` and obfuscated token hashes.
+  - `EloquentReadModel` removed `Padosoft\LaravelFlow\FlowRun` dependency and now uses local status constants.
+- **Next**: push latest hardening commit on PR #19, then complete mandatory Copilot review gate and merge subtask into `task/read-model-adapter`.
+- **Blocked**: none locally; remote step remains waiting for Copilot review activity on PR #19.
 
 ## Macro 2 — DONE ✅
 
