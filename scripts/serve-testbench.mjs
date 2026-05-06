@@ -1,8 +1,20 @@
 #!/usr/bin/env node
 /**
  * Boots Orchestra Testbench's bundled Laravel app via `php vendor/bin/testbench serve`
- * so Playwright can run E2E tests against the package's real route stack
- * (FlowAdminServiceProvider auto-discovered through composer.json `extra.laravel.providers`).
+ * so Playwright can run E2E tests against the package's real route stack.
+ *
+ * Provider registration: `vendor/bin/testbench serve` does NOT honour the
+ * `extra.laravel.providers` block in `composer.json` (that block is consumed
+ * only by Laravel's package-discovery in a *consumer* app). Inside the package
+ * itself, providers are registered through `testbench.yaml`'s `providers:`
+ * list, which Testbench reads when `vendor/bin/testbench serve` boots.
+ *
+ * `testbench.yaml`'s `env:` block is the most reliable channel for Laravel's
+ * `env()` helper to see overrides under Testbench: it is applied after the
+ * bundled `vendor/orchestra/testbench-core/laravel/.env` Dotenv load, so it
+ * always wins over the pre-set defaults there. We also pass
+ * `FLOW_ADMIN_MIDDLEWARE=web` and `FLOW_ADMIN_ADAPTER=array` on the spawned
+ * PHP process environment below for belt-and-suspenders.
  *
  * Cross-platform launcher:
  *   - POSIX: `spawn('php', ['vendor/bin/testbench', 'serve', …])`.

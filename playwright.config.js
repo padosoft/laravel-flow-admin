@@ -4,6 +4,31 @@ const PORT = process.env.FLOW_ADMIN_E2E_PORT ?? '8001';
 const HOST = process.env.FLOW_ADMIN_E2E_HOST ?? '127.0.0.1';
 const BASE_URL = process.env.FLOW_ADMIN_E2E_BASE_URL ?? `http://${HOST}:${PORT}`;
 
+// Build the healthcheck URL via `new URL` so a BASE_URL with a trailing slash
+// (`http://localhost:8001/`) or an inline path (`http://localhost:8001/admin/`)
+// produces a single well-formed `…/flow` instead of the malformed `…//flow`
+// or `…/admin//flow` that string concatenation would yield. Both malformed
+// shapes silently hang the Playwright webServer poll until the 120s timeout.
+//
+// `new URL` throws on a non-absolute base (e.g. `FLOW_ADMIN_E2E_BASE_URL=foo`
+// with no scheme), which would otherwise prevent the config from loading at
+// all. Mirror the recovery path in `scripts/serve-testbench.mjs`: log and
+// fall back to the assembled-from-host/port form.
+function buildHealthUrl(base) {
+  try {
+    return new URL('/flow', base).toString();
+  } catch (error) {
+    const fallback = `http://${HOST}:${PORT}/flow`;
+    console.error(
+      `[playwright.config] FLOW_ADMIN_E2E_BASE_URL=${base} is not a valid URL; ` +
+        `falling back to ${fallback}.`,
+      error,
+    );
+    return fallback;
+  }
+}
+const HEALTH_URL = buildHealthUrl(BASE_URL);
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,
@@ -24,7 +49,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'node scripts/serve-testbench.mjs',
-    url: `${BASE_URL}/flow`,
+    url: HEALTH_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     stdout: 'pipe',
