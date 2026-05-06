@@ -5,9 +5,45 @@
 
 ## Now / Next / Blocked
 
-- **Now**: Macro 2 (`task/baseline-tooling`) — subtask `baseline-1-composer-phpunit-pint-phpstan` starting.
-- **Next**: After Macro 2 → Macro 3 Design System.
+- **Now**: Macro 2 (`task/baseline-tooling`) — subtask 2.3 in progress on
+  `subtask/baseline-2-vite-alpine-eslint-playwright`. Subtask 2.1+2.2 (PR #9)
+  squash-merged onto `task/baseline-tooling` at SHA `c83b7d9`.
+- **Next**:
+  1. Finish subtask 2.3 — push branch, open PR with `--reviewer copilot`
+     (GraphQL fallback as in `.claude/skills/copilot-pr-review-loop/SKILL.md`),
+     loop Copilot+CI, merge squash.
+  2. Macro 2 PR `task/baseline-tooling` → `main`. Loop. Merge.
+  3. Macros 3 → 10 per `docs/IMPLEMENTATION_PLAN.md` §3 (Design System,
+     Read Model, Overview+Runs, Run Detail, Approvals/Outbox/Definitions/Settings,
+     CmdK+AutoRefresh, README WOW + v0.1.0 release, LESSON harvest).
 - **Blocked**: nothing.
+
+### Subtask 2.3 — local validation status (handoff)
+
+Local PowerShell gate (Windows):
+
+| Gate | Result |
+|------|--------|
+| `composer validate --strict --no-check-publish` | ✅ green |
+| `composer format:test` (Pint) | ✅ green |
+| `composer analyse` (PHPStan level 8) | ✅ green |
+| `composer test` (PHPUnit) | ✅ green — 13 tests / 24 assertions |
+| `npm run lint` (ESLint flat config) | ✅ green |
+| `npm run build` (Vite 5) | ✅ green — manifest + admin + styles in `public/vendor/flow-admin/` |
+| `npm run test:e2e` chromium | ⚠️ **local Windows**: Testbench serves `/flow` 200 but Playwright `webServer.url` polling stays in a 1-second-per-poll loop instead of hitting a normal Playwright sub-second poll. Logs were truncated mid-run (>30s of identical `/flow` ~0.18ms log lines from testbench). Two hypotheses to confirm in the next session: (a) Windows PATHEXT/quoting still misbehaves under cmd.exe and Playwright never gets a clean response code; (b) testbench serve emits console output that Playwright is interpreting as healthcheck failure. **CI on Ubuntu uses the POSIX branch of `scripts/serve-testbench.mjs` (no cmd.exe wrapper) and should be much cleaner.** Push and let CI verify before further local debugging. |
+
+Files added/changed in this subtask:
+
+- `package.json` (Vite 5 / Alpine 3 / ESLint 9 / Playwright 1.59 — root level so CI `frontend` job picks it up)
+- `package-lock.json` (committed for reproducible `npm ci`)
+- `eslint.config.js` (flat config — required by ESLint 9)
+- `vite.config.js` (input: `resources/js/admin.js` + `resources/css/admin.css`, output: `public/vendor/flow-admin/`)
+- `playwright.config.js` (chromium/firefox/webkit projects + `webServer` block invoking `node scripts/serve-testbench.mjs`)
+- `resources/js/admin.js` (Alpine bootstrap)
+- `resources/css/admin.css` (token-system stub — full port lands in Macro 3)
+- `scripts/serve-testbench.mjs` (cross-platform launcher for `php vendor/bin/testbench serve` — POSIX branch is `spawn('php', …)`; Windows branch is `spawn('cmd.exe', ['/d','/s','/c', cmdLine])` with quoted testbench path because the repo path contains a space)
+- `tests/e2e/smoke.spec.js` (asserts `GET /flow` → 200 + `<h1>` contains "Flow Admin")
+- `config/flow-admin.php` — `middleware` is now env-driven via `FLOW_ADMIN_MIDDLEWARE` (default `web,auth`), so the E2E webServer can boot without `auth` middleware. Default still `['web','auth']`. Tests still green (the existing `test_config_is_loaded` already asserts only key presence, not env-driven values).
 
 ## Macro 1 — DONE ✅
 
@@ -25,14 +61,14 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 | Branch | Base | Status |
 |--------|------|--------|
 | `task/baseline-tooling` | `main` | open (macro) — Macro 2 |
-| `subtask/baseline-1-composer-phpunit-pint-phpstan` | `task/baseline-tooling` | in progress |
+| `subtask/baseline-2-vite-alpine-eslint-playwright` | `task/baseline-tooling` | in progress (subtask 2.3 frontend tooling) |
 
 ## Macro task status
 
 | # | Macro | Branch | State |
 |---|-------|--------|-------|
 | 1 | Agent Operating System | `task/agent-operating-system` | ✅ merged on main `f32ac2f` |
-| 2 | Baseline Tooling Laravel 13 | `task/baseline-tooling` | not started |
+| 2 | Baseline Tooling Laravel 13 | `task/baseline-tooling` | in progress — subtask 2.1+2.2 merged (`c83b7d9`); subtask 2.3 (frontend) pushing |
 | 3 | Design System & Layout Shell | `task/design-system-shell` | not started |
 | 4 | Read Model Adapter | `task/read-model-adapter` | not started |
 | 5 | Pages — Overview & Runs | `task/pages-overview-runs` | not started |
