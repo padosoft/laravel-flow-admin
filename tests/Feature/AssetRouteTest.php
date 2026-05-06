@@ -52,6 +52,40 @@ final class AssetRouteTest extends TestCase
         $this->assertStringEndsWith('/_flow-admin/assets/admin.css', $url);
     }
 
+    public function test_admin_css_response_emits_revalidatable_cache_headers(): void
+    {
+        // Pin: the asset is NOT content-hashed (Macro 3.2 introduces the
+        // hashed Vite variant). To avoid 24h-stale CSS after a deploy, the
+        // controller must send Last-Modified + must-revalidate, with a
+        // short max-age that still amortises navigation costs.
+        $response = $this->get('/_flow-admin/assets/admin.css');
+
+        $response->assertStatus(200);
+        $response->assertHeader('Cache-Control');
+        $cacheControl = $response->headers->get('Cache-Control');
+        $this->assertStringContainsString('must-revalidate', (string) $cacheControl);
+        $this->assertStringContainsString('max-age=300', (string) $cacheControl);
+        $response->assertHeader('Last-Modified');
+    }
+
+    public function test_admin_css_returns_304_when_if_modified_since_matches(): void
+    {
+        // Pin the conditional-GET path: a browser sending
+        // If-Modified-Since equal to the file's mtime gets back 304 (not
+        // a 200 with a fresh body). This is the bandwidth-saving leg of
+        // the "no content hash + must-revalidate" caching contract.
+        $first = $this->get('/_flow-admin/assets/admin.css');
+        $first->assertStatus(200);
+        $lastModified = $first->headers->get('Last-Modified');
+        $this->assertNotNull($lastModified);
+
+        $second = $this->withHeaders([
+            'If-Modified-Since' => $lastModified,
+        ])->get('/_flow-admin/assets/admin.css');
+
+        $second->assertStatus(304);
+    }
+
     /**
      * `Response::file()` returns a `BinaryFileResponse` that streams its
      * content via `sendContent()` to the SAPI rather than buffering it on

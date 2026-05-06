@@ -6,6 +6,12 @@
          port) is wired through `/_flow-admin/assets/admin.css`,
       2. the dark/light theme attribute on <html> resolves correctly,
       3. Blade view discovery is healthy (`flow-admin::pages.overview`).
+
+    Class names below come from the ported `resources/css/admin.css`
+    (`.page`, `.page-head`, `.page-title`, `.page-sub`). The Macro 3.2
+    layout shell will wrap this content in `.app` + `.sidebar` + `.topbar`
+    + `.content`; until then we render the page in isolation and the
+    visual baseline test pins the no-shell skeleton.
 --}}
 <!doctype html>
 <html lang="en" data-theme="{{ config('flow-admin.theme_default', 'dark') }}">
@@ -16,10 +22,12 @@
     <link rel="stylesheet" href="{{ route('flow-admin.assets.css') }}">
 </head>
 <body>
-    <main class="app-shell" data-testid="flow-admin-overview-shell">
-        <header class="app-shell__header">
-            <h1 class="app-shell__title">Flow Admin</h1>
-            <p class="app-shell__subtitle">Macro 3.1 skeleton — design tokens wired, full overview lands in Macro 5.</p>
+    <main class="page" data-testid="flow-admin-overview-shell">
+        <header class="page-head">
+            <div>
+                <h1 class="page-title">Flow Admin</h1>
+                <p class="page-sub">Macro 3.1 skeleton — design tokens wired, full overview lands in Macro 5.</p>
+            </div>
         </header>
     </main>
 </body>

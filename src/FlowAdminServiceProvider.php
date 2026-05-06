@@ -6,7 +6,7 @@ namespace Padosoft\LaravelFlowAdmin;
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\AdminCssController;
 
 class FlowAdminServiceProvider extends ServiceProvider
 {
@@ -62,6 +62,13 @@ class FlowAdminServiceProvider extends ServiceProvider
      * the design tokens (light + dark theme) consumed by every admin Blade
      * template.
      *
+     * The handler is an invokable controller (`AdminCssController`), NOT a
+     * closure: Laravel cannot serialise closures for `php artisan
+     * route:cache`, which is a common production optimisation in consumer
+     * apps. The controller form keeps the package route-cacheable and lets
+     * the cache headers (Last-Modified, must-revalidate, max-age=300)
+     * live in tested code rather than in this provider.
+     *
      * Why a Laravel route instead of a Vite-built link tag:
      * - Testbench's `serve` command does not expose this package's
      *   `public/vendor/flow-admin/` build output through its public dir, so
@@ -75,19 +82,13 @@ class FlowAdminServiceProvider extends ServiceProvider
      *   stylesheets must be reachable for unauthenticated users too,
      *   otherwise the login redirect would render unstyled.
      *
-     * The bypass-headers route lives under `/_flow-admin/assets/{file}` —
-     * the underscore prefix marks it as a package-internal route, away
-     * from the user-facing `/flow` namespace.
+     * The route lives under `/_flow-admin/assets/{file}` — the underscore
+     * prefix marks it as a package-internal route, away from the
+     * user-facing `/flow` namespace.
      */
     private function registerPackagedAssetRoutes(): void
     {
-        Route::get('/_flow-admin/assets/admin.css', function (): BinaryFileResponse {
-            $path = __DIR__ . '/../resources/css/admin.css';
-
-            return response()->file($path, [
-                'Content-Type' => 'text/css; charset=utf-8',
-                'Cache-Control' => 'public, max-age=86400',
-            ]);
-        })->name('flow-admin.assets.css');
+        Route::get('/_flow-admin/assets/admin.css', AdminCssController::class)
+            ->name('flow-admin.assets.css');
     }
 }
