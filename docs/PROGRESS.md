@@ -5,9 +5,20 @@
 
 ## Now / Next / Blocked
 
-- **Now**: Macro 2 (`task/baseline-tooling`) — subtask `baseline-1-composer-phpunit-pint-phpstan` starting.
-- **Next**: After Macro 2 → Macro 3 Design System.
+- **Now**: Macro 2 (`task/baseline-tooling`) closing — macro PR #11 to `main`
+  is open with Copilot review hotfix subtask in flight
+  (`subtask/baseline-2-macro-pr-fixes`).
+- **Next**: After Macro 2 PR #11 merges to `main` → Macro 3 Design System
+  on `task/design-system-shell`.
 - **Blocked**: nothing.
+
+## Macro 2 — closing (subtasks done, macro PR #11 in CI/Copilot loop)
+
+| PR | Type | Squash SHA |
+|----|------|------------|
+| #9 | subtask 2.1+2.2 (composer / phpunit / pint / phpstan / ServiceProvider skeleton + 13 tests) | `c83b7d9` on `task/baseline-tooling` |
+| #10 | subtask 2.3 (Vite + Alpine + ESLint 9 + Playwright 1.59 + testbench.yaml + 23 tests / 34 assertions) | `34d3ee0` on `task/baseline-tooling` |
+| #11 | macro → main | open — addressing Copilot hotfix round |
 
 ## Macro 1 — DONE ✅
 
@@ -24,15 +35,15 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 
 | Branch | Base | Status |
 |--------|------|--------|
-| `task/baseline-tooling` | `main` | open (macro) — Macro 2 |
-| `subtask/baseline-1-composer-phpunit-pint-phpstan` | `task/baseline-tooling` | in progress |
+| `task/baseline-tooling` | `main` | open (macro) — PR #11 in Copilot+CI loop |
+| `subtask/baseline-2-macro-pr-fixes` | `task/baseline-tooling` | open — addresses 3 Copilot threads on PR #11 |
 
 ## Macro task status
 
 | # | Macro | Branch | State |
 |---|-------|--------|-------|
 | 1 | Agent Operating System | `task/agent-operating-system` | ✅ merged on main `f32ac2f` |
-| 2 | Baseline Tooling Laravel 13 | `task/baseline-tooling` | not started |
+| 2 | Baseline Tooling Laravel 13 | `task/baseline-tooling` | subtasks merged (`c83b7d9` + `34d3ee0`) — macro PR #11 closing |
 | 3 | Design System & Layout Shell | `task/design-system-shell` | not started |
 | 4 | Read Model Adapter | `task/read-model-adapter` | not started |
 | 5 | Pages — Overview & Runs | `task/pages-overview-runs` | not started |

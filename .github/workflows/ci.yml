@@ -202,6 +202,7 @@ jobs:
       - name: Run Playwright (${{ matrix.browser }})
         if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         env:
+          FLOW_ADMIN_MIDDLEWARE: web
           FLOW_ADMIN_ADAPTER: array
         run: npm run test:e2e -- --project=${{ matrix.browser }}
 

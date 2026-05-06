@@ -5,6 +5,68 @@
 
 ---
 
+## 2026-05-06 — Subtask 2.3 Playwright CI green-up
+
+### Workflow-step `env:` does NOT propagate to PHP `env()` reliably under `vendor/bin/testbench serve` — use `testbench.yaml` `env:` block
+
+- GH Actions `env:` blocks export shell vars before the step's `run:`. PHP CLI inherits the shell env, so `getenv()` and `$_SERVER[...]` see the variable. But Laravel's `env()` helper (and our package's `env('FLOW_ADMIN_MIDDLEWARE', 'web,auth')` default) reads through `Dotenv\Repository\AdapterRepository`, which testbench's bootstrap rebinds. After `Application::create()` runs `LoadEnvironmentVariables` (the bundled `vendor/orchestra/testbench-core/laravel/.env`), our shell-exported `FLOW_ADMIN_MIDDLEWARE=web` was lost — `env()` returned `null` and the controller fell back to `['web', 'auth']`. Result on /flow: `Authenticate` middleware kicked in, redirected to `route('login')`, that route does not exist in testbench's bundled app, and we got `Symfony\\…\\RouteNotFoundException: Route [login] not defined.` rendered as a 500 — Playwright then timed out because 500 is not a `webServer.url` ready signal.
+- The diagnostic step that surfaced this used `APP_DEBUG=true APP_KEY=…` to coax Laravel's exception page out of production (`<title>Laravel</title>` only) into debug mode. The actual exception class lived in a JSON-encoded `markdown` blob inside the rendered React error page — `head -c 4000` clipped before it; the right capture is `tail -c 1500` plus a targeted `grep -oE '<h1[^>]*>[^<]+</h1>'`.
+
+**How to apply:** for any env override that the package code reads via `env()`, add it to `testbench.yaml` under the `env:` block:
+```yaml
+env:
+  FLOW_ADMIN_MIDDLEWARE: web
+  FLOW_ADMIN_ADAPTER: array
+```
+This block is processed by `Orchestra\Testbench\Foundation\Bootstrap\LoadEnvironmentVariablesFromArray` *after* the standard `LoadEnvironmentVariables` bootstrapper, so it always wins. The `testbench.yaml` is already a dev/test-only file — it never reaches consumer apps — so dropping `auth` here does not weaken the production default. Keep an explicit `FLOW_ADMIN_MIDDLEWARE: web` in the CI step env too as belt-and-suspenders documentation; `testbench.yaml` is the truthful source.
+
+### `vendor/bin/testbench serve` does NOT auto-discover the host package's providers
+
+- `extra.laravel.providers` in the host package's `composer.json` is the discovery contract for **consumer** Laravel apps that depend on the package — not for the package's own dev-time Testbench server.
+- Without a `testbench.yaml` at the repo root, `vendor/bin/testbench serve` boots the bundled Testbench Laravel app with **zero** of the host package's providers registered. Routes from `routes/flow-admin.php` never load and `/flow` returns 404 — even though PHPUnit Feature tests pass (those use `getPackageProviders()` on the test case).
+- The CI symptom is misleading: Playwright sees /flow returning 404 fast, our pre-Playwright-1.50 versions retry until webServer.timeout fires (`Timed out waiting 120000ms from config.webServer.`), and the report blames the webServer instead of the actual route registration miss.
+
+**How to apply:** every package that runs `vendor/bin/testbench serve` for E2E (or local DX) ships a `testbench.yaml` at the repo root explicitly listing the package providers:
+```yaml
+laravel: '@testbench'
+providers:
+  - Padosoft\LaravelFlowAdmin\FlowAdminServiceProvider
+```
+This is independent from `extra.laravel.providers` (which serves consumer apps) and from `tests/TestCase.php::getPackageProviders()` (which serves PHPUnit). Without all three the package is not actually wired in any of the three contexts.
+
+### Vite `outDir` inside `publicDir` causes infinite recursive copy on Windows
+
+- Default Vite config copies `publicDir` (default `public/`) into `outDir`. If `outDir` is `public/vendor/flow-admin`, the copy nests `public/vendor/flow-admin/vendor/flow-admin/...` on every build until the path exceeds Windows' MAX_PATH (260) and the build either crashes with `ENOTEMPTY` or silently wedges on the next run.
+- Once the deep tree exists, `Remove-Item -Recurse` and `cmd /c rmdir /s /q` both fail because the path is too long even for the long-path `\\?\` prefix in some PowerShell builds. The reliable cleanup is `robocopy <empty-dir> public/vendor /MIR` followed by `Remove-Item public/vendor`.
+
+**How to apply:** when the Vite output lives inside `public/`, set `publicDir: false` on the root config (or `build.copyPublicDir: false`). This package does not use a separate static-public source tree — all assets are emitted into `outDir` from `resources/`, so disabling the copy is correct. Document the why in a comment on the config so a future contributor does not reintroduce the recursion by adding a `public/static-stuff/` folder and re-enabling `publicDir`.
+
+---
+
+## 2026-05-06 — Subtask 2.3 Playwright web-server cross-platform launcher
+
+### Node `spawn('php', …)` on Windows fails for two compounding reasons
+
+- Node's `spawn` without `shell: true` does **not** honour Windows `PATHEXT`, so `spawn('php', args)` returns `ENOENT` even when `php.exe` is on `PATH`.
+- Adding `shell: true` triggers the Node 22+ deprecation about non-escaped args, and **also** misparses paths that contain spaces — for this repo `vendor/bin/testbench` lives under `…\Visual Basic\Ai\laravel-flow-admin\…`, and the space in `Visual Basic` causes cmd to split the testbench path into two arguments, breaking the launch (`spawn EINVAL`).
+- A `where php` lookup followed by `spawn(absolutePath, args)` works for `.exe`, but if `where` returns a `.bat`/`.cmd` shim first (common on dev machines that wrap PHP through Composer scripts) Node ≥18 refuses to spawn it without `shell: true`, putting us back to the previous problem.
+
+**How to apply:** in cross-platform launchers like `scripts/serve-testbench.mjs`, branch on `process.platform`:
+
+- POSIX: plain `spawn('php', [testbench, …])`.
+- Windows: `spawn('cmd.exe', ['/d','/s','/c', `php "${testbench}" serve …`], { windowsVerbatimArguments: true })`. The `cmd.exe /d /s /c` invocation lets cmd resolve `php` via PATHEXT, and the explicit double-quotes around the testbench path survive the space in `Visual Basic`. Keep the args list to `cmd.exe` minimal (only the single command-string after `/c`) to avoid re-quoting issues.
+
+CI runs on Linux so it always takes the POSIX branch — Windows quirks never reach the green-bar path. The Windows branch exists only for local DX on the maintainer's box.
+
+### Make `flow-admin.middleware` env-driven so E2E can skip auth without forking config
+
+- The default `['web', 'auth']` is correct for production but blocks E2E smoke specs (which would have to seed an authenticated session for every spec just to GET `/flow`).
+- Hard-coding two configs (one for prod, one for tests) drifts; coupling the smoke to a fixture login is overkill for a "does the bundle wire up?" check.
+
+**How to apply:** keep the single `config/flow-admin.php` `middleware` key as the public contract, but read it from `FLOW_ADMIN_MIDDLEWARE` (CSV, default `web,auth`). The E2E launcher (`scripts/serve-testbench.mjs`) sets `FLOW_ADMIN_MIDDLEWARE=web` so testbench serve routes through `web` only. Production deployments override via real env. The existing `test_config_is_loaded` already asserts only key presence — no test breakage.
+
+---
+
 ## 2026-05-06 — Macro PR #2 Codex pass
 
 ### Tarball extract path mismatched the docs we wrote citing it
