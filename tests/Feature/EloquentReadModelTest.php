@@ -89,25 +89,25 @@ final class EloquentReadModelTest extends TestCase
         ]);
 
         $model = $this->makeModel();
-        $all = $model->listRuns(perPage: 2, page: 1);
+        $all = $model->listRuns(null, null, null, 1, 2);
         $this->assertSame(4, $all->total);
         $this->assertCount(2, $all->items);
         $this->assertSame($runSuccess, $all->items[0]->id);
         $this->assertSame($runFailed, $all->items[1]->id);
 
-        $page2 = $model->listRuns(perPage: 2, page: 2);
+        $page2 = $model->listRuns(null, null, null, 2, 2);
         $this->assertCount(2, $page2->items);
         $this->assertSame($runAborted, $page2->items[0]->id);
         $this->assertSame($runPending, $page2->items[1]->id);
 
-        $failed = $model->listRuns(status: 'failed');
+        $failed = $model->listRuns('failed');
         $this->assertSame(2, $failed->total);
         $this->assertCount(2, $failed->items);
 
-        $flow = $model->listRuns(flow: 'billing.run');
+        $flow = $model->listRuns(null, 'billing.run');
         $this->assertSame(2, $flow->total);
 
-        $search = $model->listRuns(query: 'search-key');
+        $search = $model->listRuns(null, null, 'search-key');
         $this->assertSame(1, $search->total);
         $this->assertSame('run-aborted', $search->items[0]->id);
     }
@@ -200,22 +200,22 @@ final class EloquentReadModelTest extends TestCase
             'created_at' => $oldest,
         ]);
 
-        $all = $this->makeModel()->listApprovals(page: 1, perPage: 25);
+        $all = $this->makeModel()->listApprovals(null, null, 1, 25);
         $this->assertSame(3, $all->total);
         $this->assertCount(3, $all->items);
         $this->assertSame('approval-1', $all->items[0]->tokenId);
         $this->assertSame('approval-2', $all->items[1]->tokenId);
         $this->assertSame('approval-3', $all->items[2]->tokenId);
 
-        $granted = $this->makeModel()->listApprovals(status: 'granted');
+        $granted = $this->makeModel()->listApprovals('granted');
         $this->assertSame(1, $granted->total);
         $this->assertSame('granted', $granted->items[0]->status);
 
-        $query = $this->makeModel()->listApprovals(query: 'charge');
+        $query = $this->makeModel()->listApprovals(null, 'charge');
         $this->assertSame(1, $query->total);
         $this->assertSame('charge', $query->items[0]->stepName);
 
-        $pending = $this->makeModel()->pendingApprovals(limit: 5);
+        $pending = $this->makeModel()->pendingApprovals(5);
         $this->assertCount(1, $pending);
         $this->assertSame('approval-2', $pending[0]->tokenId);
         $this->assertSame('alice', $pending[0]->approver);
@@ -257,11 +257,11 @@ final class EloquentReadModelTest extends TestCase
         $this->assertSame('pending', $pending[0]->status);
         $this->assertSame('pending', $pending[1]->status);
 
-        $pendingFiltered = $this->makeModel()->listWebhookOutbox(status: 'pending');
+        $pendingFiltered = $this->makeModel()->listWebhookOutbox('pending');
         $this->assertSame(1, $pendingFiltered->total);
         $this->assertSame('flow.completed', $pendingFiltered->items[0]->eventType);
 
-        $search = $this->makeModel()->listWebhookOutbox(query: 'flow.');
+        $search = $this->makeModel()->listWebhookOutbox(null, 'flow.');
         $this->assertSame(3, $search->total);
         $this->assertSame('flow.paused', $search->items[0]->eventType);
         $this->assertSame('flow.failed', $search->items[1]->eventType);
