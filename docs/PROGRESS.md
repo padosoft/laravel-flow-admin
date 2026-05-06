@@ -5,14 +5,13 @@
 
 ## Now / Next / Blocked
 
-- **Now**: Macro 4 (`task/read-model-adapter`) — subtask 4.1 in flight on
-  `subtask/read-model-1-viewmodels`: `Contracts\Dto\*` (RunSummary,
-  RunDetail, Step, AuditEvent, KpiSummary, ThroughputBucket,
-  ApprovalSummary, OutboxEntry, FlowDefinition) + `ViewModels\*` with
-  `fromDto` factories + `Support\Format` helper.
-- **Next**: Subtask 4.2 EloquentReadModel, 4.3 ArrayReadModel, 4.4
-  DashboardActionAuthorizer wrapper. Then macro PR → `main`, then
-  Macro 5 Pages Overview & Runs.
+- **Now**: Macro 4 (`task/read-model-adapter`) — subtask `read-model-2-eloquent`
+  in progress, covering:
+  4.2 `EloquentReadModel` + `ReadModel` contract,
+  4.3 `ArrayReadModel` + fixture integration,
+  4.4 `DashboardActionAuthorizer` contract/wrapper.
+- **Next**: Validate PR loop and merge macro 4 into `task/read-model-adapter`,
+  then open Macro 5 PR (`task/pages-overview-runs`).
 - **Blocked**: nothing.
 
 ## Macro 2 — DONE ✅
@@ -42,7 +41,8 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 | Branch | Base | Status |
 |--------|------|--------|
 | `task/read-model-adapter` | `main` | open (macro) — Macro 4 |
-| `subtask/read-model-1-viewmodels` | `task/read-model-adapter` | in progress — DTO contracts + ViewModels + 49 unit tests / 211 assertions |
+| `subtask/read-model-1-viewmodels` | `task/read-model-adapter` | done (PR #18 merged) |
+| `subtask/read-model-2-eloquent` | `task/read-model-adapter` | in progress — `ReadModel` contract, `EloquentReadModel`, `ArrayReadModel`, `ActionAuthorizer` + tests |
 
 ## Macro task status
 
@@ -51,8 +51,7 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 | 1 | Agent Operating System | `task/agent-operating-system` | ✅ merged on main `f32ac2f` |
 | 2 | Baseline Tooling Laravel 13 | `task/baseline-tooling` | ✅ merged on main `1f5d0ed` |
 | 3 | Design System & Layout Shell | `task/design-system-shell` | ✅ merged on main `617e427` |
-| 4 | Read Model Adapter | `task/read-model-adapter` | in progress — subtask 4.1 (DTOs + ViewModels) |
-| 4 | Read Model Adapter | `task/read-model-adapter` | not started |
+| 4 | Read Model Adapter | `task/read-model-adapter` | in progress — subtasks 4.2/4.3/4.4 |
 | 5 | Pages — Overview & Runs | `task/pages-overview-runs` | not started |
 | 6 | Pages — Run Detail | `task/pages-run-detail` | not started |
 | 7 | Pages — Approvals/Outbox/Definitions/Settings | `task/pages-misc` | not started |
