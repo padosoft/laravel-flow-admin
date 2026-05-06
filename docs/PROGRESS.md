@@ -5,14 +5,22 @@
 
 ## Now / Next / Blocked
 
-- **Now**: Macro 3 (`task/design-system-shell`) — subtask 3.1 in flight on
-  `subtask/design-system-1-styles-port`: pixel-perfect port of
-  `.design-source/project/styles.css` (1208 lines) to
-  `resources/css/admin.css`, served at `/_flow-admin/assets/admin.css`.
-- **Next**: Subtask 3.2 — layout Blade shell + sidebar/topbar/breadcrumbs +
-  `x-flow-admin::icon` + theme cookie toggle. Then macro PR #?? → `main`,
-  then Macro 4 Read Model Adapter on `task/read-model-adapter`.
-- **Blocked**: nothing.
+- **Now**: Completed local implementation sweep for Macro 4→10 scope on `subtask/read-model-2-eloquent`:
+  `ReadModel` contract + adapters, all page controllers/views, runtime API (`/flow/api/search`, `/flow/api/live`), Macro 8 interactions (⌘K, polling toggle, toasts), and Macro 9 docs/release files are present in working tree.
+- **Now (validated locally on 2026-05-06)**:
+  - `composer validate --strict --no-check-publish` ✅
+  - `composer format:test` ✅
+  - `composer analyse` ✅
+  - `composer test` ✅ (101 tests, 584 assertions)
+  - `npm run lint` ✅
+  - `npm run build` ✅
+  - `npm run test:e2e` ✅ (18 passed, 3 visual-gated skipped)
+- **Now**: follow-up hardening fixes applied on `subtask/read-model-2-eloquent`:
+  - `ArrayReadModel` now merges defaults + disk fixture + constructor fixture (constructor fixture has precedence).
+  - `Authorize` now logs sanitized `actor/context` and obfuscated token hashes.
+  - `EloquentReadModel` removed `Padosoft\LaravelFlow\FlowRun` dependency and now uses local status constants.
+- **Next**: push latest hardening commit on PR #19, then complete mandatory Copilot review gate and merge subtask into `task/read-model-adapter`.
+- **Blocked**: none locally; remote step remains waiting for Copilot review activity on PR #19.
 
 ## Macro 2 — DONE ✅
 
@@ -40,8 +48,9 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 
 | Branch | Base | Status |
 |--------|------|--------|
-| `task/design-system-shell` | `main` | open (macro) — Macro 3 |
-| `subtask/design-system-2-layout-shell` | `task/design-system-shell` | in progress — layout shell + sidebar/topbar/breadcrumbs + icon component + theme toggle |
+| `task/read-model-adapter` | `main` | open (macro) — Macro 4 |
+| `subtask/read-model-1-viewmodels` | `task/read-model-adapter` | done (PR #18 merged) |
+| `subtask/read-model-2-eloquent` | `task/read-model-adapter` | in progress — `ReadModel` contract, `EloquentReadModel`, `ArrayReadModel`, `ActionAuthorizer` + tests |
 
 ## Macro task status
 
@@ -49,14 +58,14 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 |---|-------|--------|-------|
 | 1 | Agent Operating System | `task/agent-operating-system` | ✅ merged on main `f32ac2f` |
 | 2 | Baseline Tooling Laravel 13 | `task/baseline-tooling` | ✅ merged on main `1f5d0ed` |
-| 3 | Design System & Layout Shell | `task/design-system-shell` | in progress — subtask 3.1 (styles port) |
-| 4 | Read Model Adapter | `task/read-model-adapter` | not started |
-| 5 | Pages — Overview & Runs | `task/pages-overview-runs` | not started |
-| 6 | Pages — Run Detail | `task/pages-run-detail` | not started |
-| 7 | Pages — Approvals/Outbox/Definitions/Settings | `task/pages-misc` | not started |
-| 8 | ⌘K Palette + Auto-refresh + Toasts | `task/cmdk-search` | not started |
-| 9 | Hardening, README, Release | `task/hardening-release` | not started |
-| 10 | Harvest LESSON.md → rules/skills | `task/lessons-harvest` | not started |
+| 3 | Design System & Layout Shell | `task/design-system-shell` | ✅ merged on main `617e427` |
+| 4 | Read Model Adapter | `task/read-model-adapter` | implementation complete locally, PR loop pending |
+| 5 | Pages — Overview & Runs | `task/pages-overview-runs` | implementation complete locally, PR loop pending |
+| 6 | Pages — Run Detail | `task/pages-run-detail` | implementation complete locally, PR loop pending |
+| 7 | Pages — Approvals/Outbox/Definitions/Settings | `task/pages-misc` | implementation complete locally, PR loop pending |
+| 8 | ⌘K Palette + Auto-refresh + Toasts | `task/cmdk-search` | implementation complete locally, PR loop pending |
+| 9 | Hardening, README, Release | `task/hardening-release` | docs/release artifacts complete locally; remote release loop pending |
+| 10 | Harvest LESSON.md → rules/skills | `task/lessons-harvest` | lesson harvest file added locally; PR loop pending |
 
 ## Restart steps
 

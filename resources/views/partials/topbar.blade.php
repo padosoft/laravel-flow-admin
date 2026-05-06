@@ -1,11 +1,6 @@
 @php
     /**
-     * Topbar partial — Macro 3.2.
-     *
-     * Theme toggle is the only interactive bit in 3.2: a POST form to
-     * `flow-admin.theme.toggle` with the next theme. Live pill, search
-     * trigger, notifications bell are placeholders here — the
-     * auto-refresh + ⌘K palette + toast bus wiring lands in Macro 8.
+     * Topbar partial — Macro 8 runtime controls.
      */
     $theme = $theme ?? config('flow-admin.theme_default', 'dark');
     $breadcrumbs = $breadcrumbs ?? [];
@@ -15,18 +10,22 @@
     @include('flow-admin::partials.breadcrumbs', ['breadcrumbs' => $breadcrumbs])
     <div class="topbar-spacer"></div>
 
-    <span class="live-pill" title="Auto-refresh status (live polling lands in Macro 8)">
+    <span class="live-pill" id="flow-live-pill" title="Auto-refresh status">
         <span class="pulse"></span>
         <span>Live</span>
     </span>
 
-    <button type="button" class="search-trigger" disabled aria-label="Open command palette (Macro 8)">
-        <x-flow-admin::icon name="search" size="13" />
-        <span>Search runs, flows, approvals…</span>
-        <span class="kbd">⌘K</span>
+    <button type="button" class="iconbtn" id="flow-live-toggle" title="Pause/Resume auto refresh" aria-label="Pause or resume auto refresh">
+        <x-flow-admin::icon name="pause" size="14" />
     </button>
 
-    <button type="button" class="iconbtn" title="Notifications" aria-label="Notifications">
+    <button type="button" class="search-trigger" id="flow-cmdk-open" aria-label="Open command palette">
+        <x-flow-admin::icon name="search" size="13" />
+        <span>Search runs, flows, approvals...</span>
+        <span class="kbd">Ctrl+K</span>
+    </button>
+
+    <button type="button" class="iconbtn" id="flow-notifications" title="Notifications" aria-label="Notifications">
         <x-flow-admin::icon name="bell" size="14" />
     </button>
 

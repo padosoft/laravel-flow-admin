@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use Padosoft\LaravelFlowAdmin\Authorizers\DenyAllAuthorizer;
 
 return [
     /*
@@ -42,6 +43,15 @@ return [
     | 'array'    — deterministic seed-42 fixtures; used for Playwright E2E tests.
     */
     'adapter' => env('FLOW_ADMIN_ADAPTER', 'eloquent'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Action authorizer
+    |--------------------------------------------------------------------------
+    | Default deny-by-default implementation. Override in host apps to integrate
+    | your permission model and make read / mutation actions available.
+    */
+    'authorizer' => DenyAllAuthorizer::class,
 
     /*
     |--------------------------------------------------------------------------
