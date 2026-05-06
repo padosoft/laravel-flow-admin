@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelFlowAdmin;
 
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\AdminCssController;
 
 class FlowAdminServiceProvider extends ServiceProvider
 {
@@ -21,6 +23,8 @@ class FlowAdminServiceProvider extends ServiceProvider
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'flow-admin');
 
         $this->loadRoutesFrom(__DIR__ . '/../routes/flow-admin.php');
+
+        $this->registerPackagedAssetRoutes();
 
         if ($this->app->runningInConsole()) {
             $this->publishes([
@@ -49,5 +53,42 @@ class FlowAdminServiceProvider extends ServiceProvider
                 ], 'flow-admin-assets');
             }
         }
+    }
+
+    /**
+     * Register a static asset route that serves the package's design-system
+     * stylesheet directly from `resources/css/admin.css`. The file is the
+     * pixel-perfect port of `.design-source/project/styles.css` and provides
+     * the design tokens (light + dark theme) consumed by every admin Blade
+     * template.
+     *
+     * The handler is an invokable controller (`AdminCssController`), NOT a
+     * closure: Laravel cannot serialise closures for `php artisan
+     * route:cache`, which is a common production optimisation in consumer
+     * apps. The controller form keeps the package route-cacheable and lets
+     * the cache headers (Last-Modified, must-revalidate, max-age=300)
+     * live in tested code rather than in this provider.
+     *
+     * Why a Laravel route instead of a Vite-built link tag:
+     * - Testbench's `serve` command does not expose this package's
+     *   `public/vendor/flow-admin/` build output through its public dir, so
+     *   the Vite hashed-asset URL is unreachable during E2E.
+     * - Consumer apps that have run `php artisan vendor:publish
+     *   --tag=flow-admin-assets` get the optimised hashed assets via the
+     *   normal Vite manifest at runtime; this fallback route is the
+     *   "always works" path that does not require a publish step.
+     * - The route is intentionally registered outside `routes/flow-admin.php`
+     *   so it does NOT inherit the admin middleware stack (`web,auth`):
+     *   stylesheets must be reachable for unauthenticated users too,
+     *   otherwise the login redirect would render unstyled.
+     *
+     * The route lives under `/_flow-admin/assets/{file}` — the underscore
+     * prefix marks it as a package-internal route, away from the
+     * user-facing `/flow` namespace.
+     */
+    private function registerPackagedAssetRoutes(): void
+    {
+        Route::get('/_flow-admin/assets/admin.css', AdminCssController::class)
+            ->name('flow-admin.assets.css');
     }
 }
