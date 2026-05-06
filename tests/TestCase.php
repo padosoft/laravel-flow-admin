@@ -25,7 +25,7 @@ abstract class TestCase extends BaseTestCase
         // Feature suite fails with `MissingAppKeyException`. The value
         // is a deterministic 32-byte test key — never a real secret;
         // exactly 32 bytes is required by AES-256-CBC.
-        $app['config']->set('app.key', 'base64:'.base64_encode(str_pad('flowadmin-test', 32, '_')));
+        $app['config']->set('app.key', 'base64:' . base64_encode(str_pad('flowadmin-test', 32, '_')));
 
         $app['config']->set('database.default', 'sqlite');
         $app['config']->set('database.connections.sqlite', [
