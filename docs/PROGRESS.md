@@ -41,7 +41,7 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 | Branch | Base | Status |
 |--------|------|--------|
 | `task/design-system-shell` | `main` | open (macro) — Macro 3 |
-| `subtask/design-system-1-styles-port` | `task/design-system-shell` | in progress — styles.css port + asset route + 3 feature tests + visual baseline (gated) |
+| `subtask/design-system-2-layout-shell` | `task/design-system-shell` | in progress — layout shell + sidebar/topbar/breadcrumbs + icon component + theme toggle |
 
 ## Macro task status
 

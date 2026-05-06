@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelFlowAdmin;
 
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\AdminCssController;
+use Padosoft\LaravelFlowAdmin\Http\Controllers\ThemeController;
 
 class FlowAdminServiceProvider extends ServiceProvider
 {
@@ -22,9 +25,28 @@ class FlowAdminServiceProvider extends ServiceProvider
     {
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'flow-admin');
 
+        // Register file-based (anonymous) Blade components under the
+        // `flow-admin` prefix. Templates use `<x-flow-admin::icon name="…" />`
+        // resolved from `resources/views/components/icon.blade.php`. The
+        // path-based registration (vs the class-based `componentNamespace`)
+        // keeps the design-system primitives template-only — no PHP class
+        // boilerplate per icon/badge/button.
+        Blade::anonymousComponentPath(
+            path: __DIR__ . '/../resources/views/components',
+            prefix: 'flow-admin',
+        );
+
         $this->loadRoutesFrom(__DIR__ . '/../routes/flow-admin.php');
 
         $this->registerPackagedAssetRoutes();
+
+        // Exempt the theme-preference cookie from EncryptCookies. The
+        // value is `light` or `dark` (publicly knowable), and Macro 8
+        // wires up a JS theme-mirror in the ⌘K palette that reads
+        // `document.cookie`; an encrypted payload would break both
+        // assertions in tests and the runtime read. The cookie is also
+        // explicitly `httpOnly: false` for the same reason.
+        EncryptCookies::except(ThemeController::COOKIE_NAME);
 
         if ($this->app->runningInConsole()) {
             $this->publishes([

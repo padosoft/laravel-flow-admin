@@ -24,7 +24,8 @@ test.describe('flow-admin overview visual baseline', () => {
 
     await page.goto('/flow');
     await expect(page.locator('html')).toHaveAttribute('data-theme', /dark|light/);
-    await expect(page.locator('[data-testid="flow-admin-overview-shell"]')).toBeVisible();
+    await expect(page.locator('[data-testid="flow-admin-shell"]')).toBeVisible();
+    await expect(page.locator('[data-testid="flow-admin-overview-page"]')).toBeVisible();
     await page.waitForLoadState('networkidle');
   });
 
