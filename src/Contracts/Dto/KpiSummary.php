@@ -19,7 +19,10 @@ final readonly class KpiSummary
      * @param  float  $deltaSuccessRate  Period-over-period change of the ratio (signed, in [−1.0, 1.0]).
      * @param  int  $failedRuns  Runs that ended in `failed` (excludes `compensated`).
      * @param  int  $deltaFailedRuns  Period-over-period change (signed).
-     * @param  int  $avgDurationMs  Mean run duration in ms over the period.
+     * @param  int  $avgDurationMs  Fallback mean run duration in ms over the period.
+     * @param  int  $p95DurationMs  P95 duration in ms over the period. If
+     *                             unavailable, adapter should default this to
+     *                             `$avgDurationMs`.
      * @param  int  $deltaAvgDurationMs  Period-over-period change in ms (signed).
      */
     public function __construct(
@@ -31,5 +34,6 @@ final readonly class KpiSummary
         public int $deltaFailedRuns,
         public int $avgDurationMs,
         public int $deltaAvgDurationMs,
+        public int $p95DurationMs = 0,
     ) {}
 }

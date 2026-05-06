@@ -65,13 +65,15 @@ final class Format
     }
 
     /**
-     * Render a 0..1 ratio as a percentage string with no decimals
-     * (`0.952` → `"95%"`). Matches the KPI tile display rule from
+     * Render a 0..1 ratio as a percentage string with one decimal
+     * (`0.952` → `"95.2%"`). Mirrors
      * `.design-source/project/page-overview.jsx`.
      */
     public static function percentLabel(float $ratio): string
     {
-        return ((int) round($ratio * 100)) . '%';
+        $ratio = max(0.0, min(1.0, $ratio));
+
+        return number_format($ratio * 100, 1, '.', '') . '%';
     }
 
     /**

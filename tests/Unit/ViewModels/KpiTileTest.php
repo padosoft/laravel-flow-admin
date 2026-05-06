@@ -42,15 +42,16 @@ final class KpiTileTest extends TestCase
             failedRuns: 18,
             deltaFailedRuns: 0,
             avgDurationMs: 4_200,
+            p95DurationMs: 6_300,
             deltaAvgDurationMs: 0,
         );
 
         [$total, $success, $failed, $duration] = KpiTile::fromKpis($kpis);
 
         $this->assertSame('1240', $total->valueLabel);
-        $this->assertSame('95%', $success->valueLabel);
+        $this->assertSame('95.2%', $success->valueLabel);
         $this->assertSame('18', $failed->valueLabel);
-        $this->assertSame('4.20s', $duration->valueLabel);
+        $this->assertSame('6.30s', $duration->valueLabel);
     }
 
     public function test_improvement_direction_inverts_for_failures_and_duration(): void

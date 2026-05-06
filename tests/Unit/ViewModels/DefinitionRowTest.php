@@ -26,7 +26,7 @@ final class DefinitionRowTest extends TestCase
         $this->assertSame('v3.4', $vm->version);
         $this->assertSame(5, $vm->stepCount);
         $this->assertSame(1_240, $vm->totalRuns);
-        $this->assertSame('95%', $vm->successRateLabel);
+        $this->assertSame('95.2%', $vm->successRateLabel);
         $this->assertSame(0.952, $vm->successRateRatio);
     }
 

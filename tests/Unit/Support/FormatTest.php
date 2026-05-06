@@ -65,10 +65,10 @@ final class FormatTest extends TestCase
 
     public function test_percent_label_rounds_half_up(): void
     {
-        $this->assertSame('0%', Format::percentLabel(0.0));
-        $this->assertSame('50%', Format::percentLabel(0.5));
-        $this->assertSame('95%', Format::percentLabel(0.952));
-        $this->assertSame('100%', Format::percentLabel(1.0));
+        $this->assertSame('0.0%', Format::percentLabel(0.0));
+        $this->assertSame('50.0%', Format::percentLabel(0.5));
+        $this->assertSame('95.2%', Format::percentLabel(0.952));
+        $this->assertSame('100.0%', Format::percentLabel(1.0));
     }
 
     public function test_delta_label_uses_typographic_minus(): void

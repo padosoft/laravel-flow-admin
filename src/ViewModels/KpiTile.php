@@ -51,7 +51,7 @@ final readonly class KpiTile
             ),
             new self(
                 label: 'Avg Duration',
-                valueLabel: Format::durationLabel($kpis->avgDurationMs),
+                valueLabel: Format::durationLabel($kpis->p95DurationMs > 0 ? $kpis->p95DurationMs : $kpis->avgDurationMs),
                 deltaLabel: Format::deltaLabel($kpis->deltaAvgDurationMs) . 'ms',
                 // Faster (lower) duration is the improvement direction.
                 deltaIsImprovement: $kpis->deltaAvgDurationMs <= 0,
