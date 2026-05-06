@@ -1,0 +1,62 @@
+{
+    "name": "padosoft/laravel-flow-admin",
+    "description": "Professional UI/UX admin panel for padosoft/laravel-flow — pixel-perfect Blade + Alpine.js dashboard with KPIs, run timeline, approvals, outbox, definitions and ⌘K palette.",
+    "keywords": ["laravel", "flow", "admin", "dashboard", "ui", "workflow"],
+    "license": "Apache-2.0",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Padosoft",
+            "email": "hello@padosoft.com",
+            "homepage": "https://github.com/padosoft"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "illuminate/config": "^13.0",
+        "illuminate/http": "^13.0",
+        "illuminate/routing": "^13.0",
+        "illuminate/support": "^13.0",
+        "illuminate/view": "^13.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^11.0",
+        "phpunit/phpunit": "^11.0",
+        "laravel/pint": "^1.18",
+        "phpstan/phpstan": "^2.0",
+        "larastan/larastan": "^3.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Padosoft\\LaravelFlowAdmin\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Padosoft\\LaravelFlowAdmin\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Padosoft\\LaravelFlowAdmin\\FlowAdminServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "format": "pint",
+        "format:test": "pint --test",
+        "analyse": "phpstan analyse --memory-limit=2G",
+        "test": "phpunit",
+        "test:unit": "phpunit --testsuite=Unit",
+        "test:feature": "phpunit --testsuite=Feature",
+        "test:architecture": "phpunit --testsuite=Architecture"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
