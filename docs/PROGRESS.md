@@ -6,11 +6,14 @@
 ## Now / Next / Blocked
 
 - **Now (2026-07-14)**: Macro E (Flow Studio UI, Laravel Flow 2.0 program) started. **E-PR0 DONE**: `task/v2e-00-hygiene` merged into macro branch `task/v2e-studio` via PR #30 (squash, commit `d4c63f5`), 6 rounds of local Copilot CLI review + 2 rounds of PR-level Copilot/Codex review, all converged to zero outstanding findings. Delivered: `composer.json` retargeted to core `dev-main` via a local `path` repository (core has no v2 tag yet); `EloquentReadModel` rewritten to route every read through core's `@api` `Dashboard\FlowDashboardReadModel` + `Contracts\DefinitionRepository` (zero raw `DB::table('flow_*')` calls); a real pre-existing bug fixed (declared step count was reading step-execution rows, not the definition's declared graph node count); plain listing/single-status filtering on runs/approvals/outbox now uses true unbounded server-side pagination (only free-text search — or, for runs, the compound `'failed'` status / a flow-prefix filter — still scans the 200-most-recent-runs bound, since core's exact-match-only filters can't express those queries server-side); a real N+1 eliminated on the runs list (was one `findRun()` call — 5 queries + full detail hydration — per row; fixed via a small companion core PR, `padosoft/laravel-flow#90`, adding `FlowDashboardReadModel::stepCounts()`); the Claude Design "Flow Studio UI" template copied into `design/claude-design-template/` (separate from the pre-existing `.design-source/project/`, the already-implemented v1 panel design); CI's `php`/`e2e` jobs updated to checkout core as a true sibling directory so the path-repo dependency resolves on GitHub Actions.
-- **Now (validated locally, 2026-07-14)**:
+- **Now (validated locally, 2026-07-14 — full gate, PHP + frontend + e2e)**:
   - `composer validate --strict --no-check-publish` ✅
   - `composer format:test` ✅
   - `composer analyse` (PHPStan level 8) ✅
   - `composer test` ✅ (111 tests, 606 assertions)
+  - `npm run lint` ✅
+  - `npm run build` ✅
+  - `npm run test:e2e` ✅ (21 runs: 17 passed, 3 visual-gated skipped, 1 firefox timeout that re-ran green in isolation — local resource contention, not a regression; PR #30's own CI run had all 3 browser jobs green)
 - **Next**: E-PR1 — React island pipeline (Vite build, mount point, asset publishing, `@xyflow/react` dependency), on a subtask branch off `task/v2e-studio`, per `docs/superpowers/plans/2026-07-14-macro-e-studio-ui.md` in the core repo.
 - **Blocked**: none.
 
@@ -45,6 +48,7 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 | Branch | Base | Status |
 |--------|------|--------|
 | `main` | n/a | active release branch |
+| `task/v2e-studio` | `main` | **ACTIVE — Macro E (Flow Studio UI)**. E-PR0 merged (PR #30 + docs follow-up PR #31). Next subtask: E-PR1 (React island pipeline), branch off `task/v2e-studio`, e.g. `task/v2e-01-react-island`. |
 | `task/read-model-adapter` | `main` | merged via PR #20 |
 | `subtask/read-model-2-eloquent` | `task/read-model-adapter` | merged via PR #19 |
 
