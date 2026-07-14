@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Padosoft\LaravelFlowAdmin\Tests;
 
 use Orchestra\Testbench\TestCase as BaseTestCase;
+use Padosoft\LaravelFlow\LaravelFlowServiceProvider;
 use Padosoft\LaravelFlowAdmin\FlowAdminServiceProvider;
 
 abstract class TestCase extends BaseTestCase
@@ -12,6 +13,7 @@ abstract class TestCase extends BaseTestCase
     protected function getPackageProviders($app): array
     {
         return [
+            LaravelFlowServiceProvider::class,
             FlowAdminServiceProvider::class,
         ];
     }

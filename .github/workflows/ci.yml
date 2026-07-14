@@ -21,9 +21,27 @@ jobs:
       fail-fast: false
       matrix:
         php: ['8.3', '8.4']
+    defaults:
+      run:
+        working-directory: laravel-flow-admin
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout laravel-flow-admin
+        uses: actions/checkout@v6
+        with:
+          path: laravel-flow-admin
+
+      # padosoft/laravel-flow has no v2 tagged release yet, so composer.json
+      # resolves it via a local path repository ("../padosoft-laravel-flow"
+      # relative to this package's root) — mirror that layout here by
+      # checking core out as a TRUE sibling directory, one level up from
+      # laravel-flow-admin, matching what a local dev checkout looks like.
+      - name: Checkout padosoft/laravel-flow (path-repo sibling)
+        uses: actions/checkout@v6
+        with:
+          repository: padosoft/laravel-flow
+          ref: main
+          path: padosoft-laravel-flow
 
       - name: Setup PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@v2
@@ -41,11 +59,11 @@ jobs:
           restore-keys: composer-${{ matrix.php }}-
 
       - name: Validate composer.json
-        if: hashFiles('composer.json') != ''
+        if: hashFiles('laravel-flow-admin/composer.json') != ''
         run: composer validate --strict --no-check-publish
 
       - name: Install dependencies (lockfile-aware)
-        if: hashFiles('composer.json') != ''
+        if: hashFiles('laravel-flow-admin/composer.json') != ''
         run: |
           if [ -f composer.lock ]; then
             composer install --prefer-dist --no-interaction --no-progress
@@ -54,19 +72,19 @@ jobs:
           fi
 
       - name: Run Pint (style check)
-        if: hashFiles('composer.json') != '' && matrix.php == '8.4'
+        if: hashFiles('laravel-flow-admin/composer.json') != '' && matrix.php == '8.4'
         run: composer format:test
 
       - name: Run PHPStan
-        if: hashFiles('composer.json') != ''
+        if: hashFiles('laravel-flow-admin/composer.json') != ''
         run: composer analyse
 
       - name: Run PHPUnit suites
-        if: hashFiles('composer.json') != ''
+        if: hashFiles('laravel-flow-admin/composer.json') != ''
         run: composer test
 
       - name: PHP gate skipped (no composer.json yet)
-        if: hashFiles('composer.json') == ''
+        if: hashFiles('laravel-flow-admin/composer.json') == ''
         run: echo "composer.json not present yet — Macro 2 will introduce it."
 
   frontend:
@@ -132,9 +150,24 @@ jobs:
       fail-fast: false
       matrix:
         browser: ['chromium', 'firefox', 'webkit']
+    defaults:
+      run:
+        working-directory: laravel-flow-admin
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout laravel-flow-admin
+        uses: actions/checkout@v6
+        with:
+          path: laravel-flow-admin
+
+      # composer install below needs the same path-repo sibling as the php
+      # job — see the comment there for why.
+      - name: Checkout padosoft/laravel-flow (path-repo sibling)
+        uses: actions/checkout@v6
+        with:
+          repository: padosoft/laravel-flow
+          ref: main
+          path: padosoft-laravel-flow
 
       - name: Detect manifests
         id: pkg
@@ -172,7 +205,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: laravel-flow-admin/package-lock.json
 
       - name: Setup Node (no cache, no lockfile yet)
         if: steps.pkg.outputs.node == 'true' && steps.pkg.outputs.lockfile != 'true'
@@ -211,7 +244,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ matrix.browser }}
-          path: playwright-report/
+          path: laravel-flow-admin/playwright-report/
           retention-days: 14
 
       - name: E2E gate skipped (no playwright config yet)

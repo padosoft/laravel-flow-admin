@@ -8,6 +8,7 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Padosoft\LaravelFlow\Contracts\DefinitionRepository;
 use Padosoft\LaravelFlow\Dashboard\FlowDashboardReadModel;
 use Padosoft\LaravelFlowAdmin\Adapters\ArrayReadModel;
 use Padosoft\LaravelFlowAdmin\Adapters\EloquentReadModel;
@@ -31,7 +32,10 @@ class FlowAdminServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(EloquentReadModel::class, function ($app): EloquentReadModel {
-            return new EloquentReadModel($app->make(FlowDashboardReadModel::class));
+            return new EloquentReadModel(
+                $app->make(FlowDashboardReadModel::class),
+                $app->make(DefinitionRepository::class),
+            );
         });
 
         $this->app->singleton(ReadModel::class, function ($app): ReadModel {

@@ -8,10 +8,19 @@ use DateInterval;
 use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
-use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Padosoft\LaravelFlow\Contracts\DefinitionRepository;
+use Padosoft\LaravelFlow\Dashboard\ApprovalFilter;
+use Padosoft\LaravelFlow\Dashboard\ApprovalSummary as DashboardApprovalSummary;
+use Padosoft\LaravelFlow\Dashboard\AuditEntry;
 use Padosoft\LaravelFlow\Dashboard\FlowDashboardReadModel;
+use Padosoft\LaravelFlow\Dashboard\Pagination;
 use Padosoft\LaravelFlow\Dashboard\RunDetail as DashboardRunDetail;
+use Padosoft\LaravelFlow\Dashboard\RunFilter;
+use Padosoft\LaravelFlow\Dashboard\RunSummary as DashboardRunSummary;
+use Padosoft\LaravelFlow\Dashboard\StepSummary;
+use Padosoft\LaravelFlow\Dashboard\WebhookOutboxFilter;
+use Padosoft\LaravelFlow\Dashboard\WebhookOutboxSummary as DashboardWebhookOutboxSummary;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ApprovalSummary;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\AuditEvent;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\FlowDefinition;
@@ -23,19 +32,68 @@ use Padosoft\LaravelFlowAdmin\Contracts\Dto\Step;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ThroughputBucket;
 use Padosoft\LaravelFlowAdmin\Contracts\PaginatedResult;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
+use Throwable;
 
+/**
+ * Routes every read exclusively through core's `@api` `FlowDashboardReadModel`
+ * (+ `Contracts\DefinitionRepository` for declared-step counts — the one
+ * named exception to "Dashboard\* only", see `AGENTS.md`) — never raw
+ * query-builder calls against the `flow_*` tables.
+ *
+ * `FlowDashboardReadModel`'s filter DTOs match on EXACT equality only (no
+ * free-text substring search, no OR-of-statuses, no distinct-name listing,
+ * no flow-name PREFIX match). Plain listing and single-exact-status
+ * filtering (`listRuns`/`listApprovals`/`listWebhookOutbox` with no free-text
+ * `query` — and for `listRuns` specifically, no compound admin status like
+ * `'failed'` and no flow-prefix filter) delegate straight to
+ * `FlowDashboardReadModel`'s own server-side pagination — NOT bounded, full
+ * history. Only a free-text search (or, for runs, a compound status /
+ * flow-prefix filter) falls back to fetching a BOUNDED, most-recent batch
+ * (`self::RECENT_BATCH_CAP` runs — the same ceiling `Dashboard\Pagination::MAX_PER_PAGE`
+ * already imposes on core's own contract) and filtering/aggregating in PHP,
+ * since core's filter DTOs cannot express those queries server-side. This is
+ * a real, deliberate scope boundary, not silently pretended away — see
+ * `laravel-flow-ai`'s `FlowAdvisor::candidateDefinitionNames()` for the
+ * identical tradeoff in a sibling package. KPIs and throughput buckets do
+ * NOT share this bound at all — {@see self::runsInWindow()} pages through
+ * every run in the requested window (up to `WINDOW_PAGE_SAFETY_CAP`, logged
+ * if ever hit) instead of stopping at `RECENT_BATCH_CAP`.
+ */
 final readonly class EloquentReadModel implements ReadModel
 {
-    private const STATUS_PENDING = 'pending';
-
     private const STATUS_SUCCEEDED = 'succeeded';
 
     private const STATUS_FAILED = 'failed';
 
     private const STATUS_ABORTED = 'aborted';
 
+    /**
+     * Bound on how far back "recent" reads (search, flow filtering, the
+     * definitions list) look — matches `Dashboard\Pagination::MAX_PER_PAGE`,
+     * the ceiling a single `FlowDashboardReadModel::listRuns()` call can
+     * ever return in one page.
+     */
+    private const RECENT_BATCH_CAP = 200;
+
+    private const THROUGHPUT_WINDOW_HOURS = 48;
+
+    /**
+     * Defensive ceiling on how many `RECENT_BATCH_CAP`-sized pages
+     * `runsInWindow()` will fetch while paging through a KPI/throughput
+     * window. Unlike `RECENT_BATCH_CAP` (an intentional "recent list" UX
+     * bound), KPI aggregates must reflect the full window population — this
+     * only guards against an unbounded loop on a pathologically busy
+     * window. 50 * RECENT_BATCH_CAP = 10,000 runs per window — well beyond
+     * any real 24h/48h rolling window this program's installs run at
+     * today. If it's ever actually hit, `runsInWindow()` logs a warning
+     * (not silent) and degrades to the partial set rather than looping
+     * forever or throwing.
+     */
+    private const WINDOW_PAGE_SAFETY_CAP = 50;
+
     public function __construct(
         private FlowDashboardReadModel $reader,
+        private DefinitionRepository $definitions,
     ) {}
 
     public function listRuns(?string $status = null, ?string $flow = null, ?string $query = null, int $page = 1, int $perPage = 25): PaginatedResult
@@ -43,104 +101,83 @@ final readonly class EloquentReadModel implements ReadModel
         $page = $this->normalizePage($page);
         $perPage = $this->normalizePerPage($perPage);
         $engineStatuses = $this->toEngineStatuses($status);
-        $search = trim((string) $query);
         $flowFilter = trim((string) $flow);
+        $search = trim((string) $query);
 
-        $rows = $this->runQuery()
-            ->when($engineStatuses !== null, function ($builder) use ($engineStatuses): void {
-                if (is_array($engineStatuses)) {
-                    $builder->whereIn('status', $engineStatuses);
+        // A single exact engine status (or none) can be pushed straight
+        // into RunFilter for TRUE server-side pagination — no RECENT_BATCH_CAP
+        // involved, so this covers the common "browse everything" /
+        // "filter by one status" cases at full scale. Only a compound
+        // status (admin 'failed' maps to two engine statuses — no OR
+        // support in RunFilter), a flow prefix filter, or free-text search
+        // fall back to the bounded batch-and-filter-in-PHP path, since none
+        // of those can be expressed as a single RunFilter.
+        if (! is_array($engineStatuses) && $flowFilter === '' && $search === '') {
+            $paged = $this->reader->listRuns(new RunFilter(status: $engineStatuses), new Pagination($page, $perPage));
 
-                    return;
-                }
+            $stepCounts = $this->reader->stepCounts(array_map(static fn (DashboardRunSummary $run): string => $run->id, $paged->items));
 
-                $builder->where('status', $engineStatuses);
-            })
-            ->when($flowFilter !== '', function ($builder) use ($flowFilter): void {
-                if (str_contains($flowFilter, ':') || str_contains($flowFilter, '@')) {
-                    $builder->where('definition_name', $flowFilter);
-
-                    return;
-                }
-
-                $builder->where(
-                    function ($builder) use ($flowFilter): void {
-                        $builder
-                            ->where('definition_name', 'like', $this->flowDefinitionLike($flowFilter . ':'))
-                            ->orWhere('definition_name', 'like', $this->flowDefinitionLike($flowFilter . '@'));
-                    },
-                );
-            })
-            ->when(
-                $search !== '',
-                fn ($builder) => $builder->where(function ($builder) use ($search): void {
-                    $builder
-                        ->where('id', 'like', $this->likePattern($search))
-                        ->orWhere('definition_name', 'like', $this->likePattern($search))
-                        ->orWhere('correlation_id', 'like', $this->likePattern($search));
-                }),
+            return new PaginatedResult(
+                items: array_map(fn (DashboardRunSummary $run): RunSummary => $this->mapRunSummary($run, $stepCounts[$run->id] ?? 0), $paged->items),
+                total: $paged->total,
+                page: $paged->page,
+                perPage: $paged->perPage,
             );
-
-        $total = (clone $rows)->count('id');
-
-        /** @var list<array<string, mixed>> $items */
-        $items = $rows
-            ->orderByDesc('started_at')
-            ->orderByDesc('id')
-            ->offset($this->offset($page, $perPage))
-            ->limit($perPage)
-            ->get()
-            ->map(static fn (object $row): array => (array) $row)
-            ->all();
-
-        $runIds = array_map(
-            static fn (string|int $id): string => (string) $id,
-            array_values(array_filter(array_column($items, 'id'), static fn (mixed $id): bool => is_string($id) || is_int($id))),
-        );
-
-        $runStepCounts = $this->stepCountsByRunId($runIds);
-
-        $mapped = [];
-        foreach ($items as $row) {
-            $runId = (string) $this->rowValue($row, 'id', '');
-            $mapped[] = $this->mapRunSummary($row, $runStepCounts[$runId] ?? 0);
         }
+
+        $filtered = array_values(array_filter(
+            $this->recentRuns(),
+            function (DashboardRunSummary $run) use ($engineStatuses, $flowFilter, $search): bool {
+                if ($engineStatuses !== null) {
+                    $matches = is_array($engineStatuses)
+                        ? in_array($run->status, $engineStatuses, true)
+                        : $run->status === $engineStatuses;
+
+                    if (! $matches) {
+                        return false;
+                    }
+                }
+
+                if ($flowFilter !== '' && ! $this->definitionNameMatchesFlow($run->definitionName, $flowFilter)) {
+                    return false;
+                }
+
+                if ($search !== '' && ! $this->runMatchesSearch($run, $search)) {
+                    return false;
+                }
+
+                return true;
+            },
+        ));
+
+        $total = count($filtered);
+        $pageItems = array_slice($filtered, $this->offset($page, $perPage), $perPage);
+
+        // Batch step counts for the whole page in ONE query instead of one
+        // findRun() (5 queries + full run-detail hydration) per row.
+        $stepCounts = $this->reader->stepCounts(array_map(static fn (DashboardRunSummary $run): string => $run->id, $pageItems));
+
+        $mapped = array_map(
+            fn (DashboardRunSummary $run): RunSummary => $this->mapRunSummary($run, $stepCounts[$run->id] ?? 0),
+            $pageItems,
+        );
 
         return new PaginatedResult($mapped, $total, $page, $perPage);
     }
 
     public function findRun(string $runId): ?RunDetail
     {
-        $run = $this->runRowForId($runId);
-        if ($run === null) {
+        $detail = $this->reader->findRun($runId);
+
+        if (! ($detail instanceof DashboardRunDetail)) {
             return null;
         }
 
-        $detail = $this->reader->findRun($runId);
-        $stepCount = $this->runStepCount($runId);
-
-        if (! ($detail instanceof DashboardRunDetail)) {
-            return new RunDetail(
-                summary: $this->mapRunSummary($run, $stepCount),
-                steps: [],
-                audit: [],
-                inputPayload: [],
-                outputPayload: [],
-            );
-        }
-
-        $steps = [];
-        foreach ($detail->steps as $step) {
-            $steps[] = $this->mapStep($step);
-        }
-
-        $audit = [];
-        foreach ($detail->audit as $entry) {
-            $audit[] = $this->mapAuditEvent($entry);
-        }
+        $steps = array_map($this->mapStep(...), $detail->steps);
+        $audit = array_map($this->mapAuditEvent(...), $detail->audit);
 
         return new RunDetail(
-            summary: $this->mapRunSummary($run, $stepCount, $stepCount),
+            summary: $this->mapRunSummary($detail->run, count($detail->steps), $this->sumAttempts($detail->steps)),
             steps: $steps,
             audit: $audit,
             inputPayload: is_array($detail->input) ? $detail->input : [],
@@ -152,33 +189,33 @@ final readonly class EloquentReadModel implements ReadModel
     {
         $page = $this->normalizePage($page);
         $perPage = $this->normalizePerPage($perPage);
+        $engineStatus = $this->toApprovalStatus($status);
         $search = trim((string) $query);
-        $status = $this->toApprovalStatus($status);
+        $filter = new ApprovalFilter(status: $engineStatus);
 
-        $rows = DB::table('flow_approvals')
-            ->when($status !== null, fn ($builder) => $builder->where('status', $status))
-            ->when(
-                $search !== '',
-                fn ($builder) => $builder->where(function ($builder) use ($search): void {
-                    $builder
-                        ->where('id', 'like', $this->likePattern($search))
-                        ->orWhere('run_id', 'like', $this->likePattern($search))
-                        ->orWhere('step_name', 'like', $this->likePattern($search));
-                }),
+        // ApprovalFilter's status is always a single exact match (no
+        // OR-of-statuses like listRuns()'s admin 'failed'), so absent a
+        // free-text search this can ALWAYS be true server-side pagination
+        // — no RECENT_BATCH_CAP involved.
+        if ($search === '') {
+            $paged = $this->reader->listApprovals($filter, new Pagination($page, $perPage));
+
+            return new PaginatedResult(
+                items: array_map($this->mapApproval(...), $paged->items),
+                total: $paged->total,
+                page: $paged->page,
+                perPage: $paged->perPage,
             );
+        }
 
-        $total = (clone $rows)->count('id');
-        /** @var list<array<string, mixed>> $items */
-        $items = $rows
-            ->orderByDesc('created_at')
-            ->offset($this->offset($page, $perPage))
-            ->limit($perPage)
-            ->get()
-            ->map(static fn (object $row): array => (array) $row)
-            ->all();
+        $candidates = $this->reader->listApprovals($filter, new Pagination(1, self::RECENT_BATCH_CAP))->items;
+        $filtered = array_values(array_filter($candidates, fn (DashboardApprovalSummary $a): bool => $this->approvalMatchesSearch($a, $search)));
+
+        $total = count($filtered);
+        $pageItems = array_slice($filtered, $this->offset($page, $perPage), $perPage);
 
         return new PaginatedResult(
-            items: array_map($this->mapApproval(...), $items),
+            items: array_map($this->mapApproval(...), $pageItems),
             total: $total,
             page: $page,
             perPage: $perPage,
@@ -189,49 +226,41 @@ final readonly class EloquentReadModel implements ReadModel
     {
         $limit = $this->normalizeLimit($limit);
 
-        /** @var list<array<string, mixed>> $rows */
-        $rows = DB::table('flow_approvals')
-            ->where('status', self::STATUS_PENDING)
-            ->orderBy('created_at')
-            ->orderBy('id')
-            ->limit($limit)
-            ->get()
-            ->map(static fn (object $row): array => (array) $row)
-            ->all();
-
-        return array_map($this->mapApproval(...), $rows);
+        return array_map($this->mapApproval(...), $this->reader->pendingApprovals($limit));
     }
 
     public function listWebhookOutbox(?string $status = null, ?string $query = null, int $page = 1, int $perPage = 25): PaginatedResult
     {
         $page = $this->normalizePage($page);
         $perPage = $this->normalizePerPage($perPage);
+        $engineStatus = $this->toWebhookStatus($status);
         $search = trim((string) $query);
-        $status = $this->toWebhookStatus($status);
+        $filter = new WebhookOutboxFilter(status: $engineStatus);
 
-        $rows = DB::table('flow_webhook_outbox')
-            ->when($status !== null, fn ($builder) => $builder->where('status', $status))
-            ->when(
-                $search !== '',
-                fn ($builder) => $builder->where(function ($builder) use ($search): void {
-                    $builder
-                        ->where('run_id', 'like', $this->likePattern($search))
-                        ->orWhere('event', 'like', $this->likePattern($search));
-                }),
+        // WebhookOutboxFilter's status is always a single exact match, so
+        // absent a free-text search this can ALWAYS be true server-side
+        // pagination — no RECENT_BATCH_CAP involved.
+        if ($search === '') {
+            $paged = $this->reader->listWebhookOutbox($filter, new Pagination($page, $perPage));
+
+            return new PaginatedResult(
+                items: array_map($this->mapOutbox(...), $paged->items),
+                total: $paged->total,
+                page: $paged->page,
+                perPage: $paged->perPage,
             );
+        }
 
-        $total = (clone $rows)->count('id');
-        /** @var list<array<string, mixed>> $items */
-        $items = $rows
-            ->orderByDesc('id')
-            ->offset($this->offset($page, $perPage))
-            ->limit($perPage)
-            ->get()
-            ->map(static fn (object $row): array => (array) $row)
-            ->all();
+        // `FlowDashboardReadModel::listWebhookOutbox()` already orders by
+        // `orderByDesc('id')` (newest first) — no re-reversal needed here.
+        $candidates = $this->reader->listWebhookOutbox($filter, new Pagination(1, self::RECENT_BATCH_CAP))->items;
+        $filtered = array_values(array_filter($candidates, fn (DashboardWebhookOutboxSummary $o): bool => $this->outboxMatchesSearch($o, $search)));
+
+        $total = count($filtered);
+        $pageItems = array_slice($filtered, $this->offset($page, $perPage), $perPage);
 
         return new PaginatedResult(
-            items: array_map($this->mapOutbox(...), $items),
+            items: array_map($this->mapOutbox(...), $pageItems),
             total: $total,
             page: $page,
             perPage: $perPage,
@@ -240,105 +269,113 @@ final readonly class EloquentReadModel implements ReadModel
 
     public function pendingWebhookOutbox(): array
     {
-        /** @var list<array<string, mixed>> $rows */
-        $rows = DB::table('flow_webhook_outbox')
-            ->whereIn('status', [self::STATUS_PENDING, 'delivering'])
-            ->orderByDesc('id')
-            ->get()
-            ->map(static fn (object $row): array => (array) $row)
-            ->all();
+        $pending = $this->reader->pendingWebhookOutbox();
+        $delivering = $this->reader->listWebhookOutbox(new WebhookOutboxFilter(status: 'delivering'), new Pagination(1, self::RECENT_BATCH_CAP))->items;
 
-        return array_map($this->mapOutbox(...), $rows);
+        // Both `$pending` and `$delivering` already come back newest-first
+        // (`orderByDesc('id')` in core); concatenating keeps pending items
+        // ahead of delivering items, which is the intended review priority.
+        return array_map($this->mapOutbox(...), [...$pending, ...$delivering]);
     }
 
     public function kpis(): KpiSummary
     {
         $windowNow = new DateTimeImmutable('now', new DateTimeZone('UTC'));
         $windowStart = $windowNow->sub(new DateInterval('P1D'));
-        $windowEnd = $windowNow;
         $prevWindowStart = $windowStart->sub(new DateInterval('P1D'));
 
-        $window = $this->runWindowRates($windowStart, $windowEnd);
-        $previous = $this->runWindowRates($prevWindowStart, $windowStart);
-        $duration = $this->durationStatsForWindow($windowStart, $windowEnd);
-        $previousDuration = $this->durationStatsForWindow($prevWindowStart, $windowStart);
+        // The previous window's end is exclusive (one second short of
+        // $windowStart): both RunFilter::$startedSince and $startedUntil
+        // are inclusive in core, so without this a run started exactly at
+        // $windowStart would be counted in BOTH windows.
+        $window = $this->runsInWindow($windowStart, $windowNow);
+        $previous = $this->runsInWindow($prevWindowStart, $windowStart->sub(new DateInterval('PT1S')));
 
-        $windowRate = $this->ratio($window['success'], $window['total']);
-        $previousRate = $this->ratio($previous['success'], $previous['total']);
+        $windowRates = $this->windowRates($window);
+        $previousRates = $this->windowRates($previous);
+        $duration = $this->durationStats($window);
+        $previousDuration = $this->durationStats($previous);
+
+        $windowRate = $this->ratio($windowRates['success'], $windowRates['total']);
+        $previousRate = $this->ratio($previousRates['success'], $previousRates['total']);
 
         return new KpiSummary(
-            totalRuns: $window['total'],
-            deltaTotalRuns: $window['total'] - $previous['total'],
+            totalRuns: $windowRates['total'],
+            deltaTotalRuns: $windowRates['total'] - $previousRates['total'],
             successRate: $windowRate,
             deltaSuccessRate: $windowRate - $previousRate,
-            failedRuns: $window['failed'],
-            deltaFailedRuns: $window['failed'] - $previous['failed'],
+            failedRuns: $windowRates['failed'],
+            deltaFailedRuns: $windowRates['failed'] - $previousRates['failed'],
             avgDurationMs: $duration['avg'],
             deltaAvgDurationMs: $duration['avg'] - $previousDuration['avg'],
             p95DurationMs: $duration['p95'],
         );
     }
 
-    /**
-     * @return list<ThroughputBucket>
-     */
     public function throughputBuckets(): array
     {
-        /** @var list<object{bucket:string,success_count:int,failed_count:int}> $rows */
-        $rows = DB::table('flow_runs')
-            ->selectRaw("strftime('%Y-%m-%d %H:00:00', started_at) as bucket")
-            ->selectRaw('SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as success_count', [self::STATUS_SUCCEEDED])
-            ->selectRaw('SUM(CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END) as failed_count', [self::STATUS_FAILED, self::STATUS_ABORTED])
-            ->whereNotNull('started_at')
-            ->groupBy('bucket')
-            ->orderBy('bucket')
-            ->get()
-            ->all();
+        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $since = $now->sub(new DateInterval('PT' . self::THROUGHPUT_WINDOW_HOURS . 'H'));
+        $runs = $this->runsInWindow($since, $now);
+
+        /** @var array<string, array{success: int, failed: int}> $byHour */
+        $byHour = [];
+
+        foreach ($runs as $run) {
+            $bucketKey = $run->startedAt?->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:00:00');
+
+            if ($bucketKey === null) {
+                continue;
+            }
+
+            $byHour[$bucketKey] ??= ['success' => 0, 'failed' => 0];
+
+            if ($run->status === self::STATUS_SUCCEEDED) {
+                $byHour[$bucketKey]['success']++;
+            } elseif (in_array($run->status, [self::STATUS_FAILED, self::STATUS_ABORTED], true)) {
+                $byHour[$bucketKey]['failed']++;
+            }
+        }
+
+        ksort($byHour);
 
         $result = [];
-        foreach ($rows as $row) {
-            $at = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', (string) $row->bucket, new DateTimeZone('UTC'));
+        foreach ($byHour as $bucketKey => $counts) {
+            $at = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $bucketKey, new DateTimeZone('UTC'));
+
             if ($at === false) {
                 continue;
             }
 
-            $result[] = new ThroughputBucket(
-                at: $at,
-                successCount: (int) $row->success_count,
-                failedCount: (int) $row->failed_count,
-            );
+            $result[] = new ThroughputBucket(at: $at, successCount: $counts['success'], failedCount: $counts['failed']);
         }
 
         return $result;
     }
 
-    /**
-     * @return list<FlowDefinition>
-     */
     public function definitions(): array
     {
-        /** @var list<object{definition_name:string,total_runs:int,success_runs:int,step_count:int}> $rows */
-        $rows = DB::table('flow_runs')
-            ->leftJoin('flow_steps', 'flow_steps.run_id', '=', 'flow_runs.id')
-            ->selectRaw('flow_runs.definition_name as definition_name')
-            ->selectRaw('COUNT(DISTINCT flow_runs.id) as total_runs')
-            ->selectRaw('COUNT(DISTINCT CASE WHEN flow_runs.status = ? THEN flow_runs.id END) as success_runs', [self::STATUS_SUCCEEDED])
-            ->selectRaw('COUNT(flow_steps.id) as step_count')
-            ->groupBy('flow_runs.definition_name')
-            ->orderBy('flow_runs.definition_name')
-            ->get()
-            ->all();
+        $runs = $this->recentRuns();
+
+        /** @var array<string, list<DashboardRunSummary>> $byName */
+        $byName = [];
+        foreach ($runs as $run) {
+            [$name] = $this->splitFlowDefinition($run->definitionName);
+            $byName[$name][] = $run;
+        }
+
+        ksort($byName);
 
         $definitions = [];
-        foreach ($rows as $row) {
-            [$name, $version] = $this->splitFlowDefinition((string) $row->definition_name);
-            $totalRuns = (int) $row->total_runs;
-            $successRuns = (int) $row->success_runs;
+        foreach ($byName as $name => $runsForName) {
+            [, $version] = $this->splitFlowDefinition($runsForName[0]->definitionName);
+            $totalRuns = count($runsForName);
+            $successRuns = count(array_filter($runsForName, fn (DashboardRunSummary $r): bool => $r->status === self::STATUS_SUCCEEDED));
 
             $definitions[] = new FlowDefinition(
                 name: $name,
                 version: $version,
-                stepCount: (int) $row->step_count,
+                stepCount: $this->declaredStepCount($name),
                 totalRuns: $totalRuns,
                 successRate: $totalRuns > 0 ? $successRuns / $totalRuns : 0.0,
             );
@@ -348,154 +385,246 @@ final readonly class EloquentReadModel implements ReadModel
     }
 
     /**
+     * The flow's DECLARED node count (its latest stored graph), not a
+     * count of step EXECUTIONS across run history — the old raw-SQL query
+     * actually computed the latter despite `FlowDefinition::$stepCount`'s
+     * own docblock promising the former, a bug this rewrite does not
+     * reproduce. Reads `$stored->graph['nodes']` directly rather than
+     * fully deserializing into a `GraphDefinition` — this method only
+     * needs a count, not an executable graph.
+     *
+     * `DefinitionRepository::latest()` can throw (signature verification
+     * failure, connection issues) for a single misconfigured/corrupted
+     * definition row; one bad row must not 500 the whole definitions list,
+     * so this degrades to 0 on failure — same defensive pattern as
+     * `OverviewController::safe()`.
+     */
+    private function declaredStepCount(string $name): int
+    {
+        try {
+            $stored = $this->definitions->latest($name);
+        } catch (Throwable) {
+            return 0;
+        }
+
+        if ($stored === null) {
+            return 0;
+        }
+
+        $nodes = $stored->graph['nodes'] ?? null;
+
+        return is_array($nodes) ? count($nodes) : 0;
+    }
+
+    /**
+     * @return list<DashboardRunSummary>
+     */
+    private function recentRuns(): array
+    {
+        return $this->reader->listRuns(new RunFilter, new Pagination(1, self::RECENT_BATCH_CAP))->items;
+    }
+
+    /**
+     * Unlike `recentRuns()` (an intentionally bounded "recent list" UX
+     * scope), KPI and throughput aggregates must reflect the full window
+     * population — this pages through every match up to
+     * `WINDOW_PAGE_SAFETY_CAP` pages.
+     *
+     * @return list<DashboardRunSummary>
+     */
+    private function runsInWindow(DateTimeImmutable $start, DateTimeImmutable $end): array
+    {
+        $filter = new RunFilter(startedSince: $start, startedUntil: $end);
+        $runs = [];
+        $page = 1;
+        $total = null;
+
+        while ($total === null || (count($runs) < $total && $page <= self::WINDOW_PAGE_SAFETY_CAP)) {
+            $result = $this->reader->listRuns($filter, new Pagination($page, self::RECENT_BATCH_CAP));
+            $runs = [...$runs, ...$result->items];
+            $total = $result->total;
+            $page++;
+
+            if ($result->items === []) {
+                break;
+            }
+        }
+
+        if (count($runs) < $total) {
+            // Not silently pretended away: a window this busy (more than
+            // WINDOW_PAGE_SAFETY_CAP * RECENT_BATCH_CAP runs) is beyond
+            // what this in-PHP aggregation can page through without an
+            // unbounded loop — log so it's observable, then degrade to
+            // the partial set rather than hang or throw.
+            Log::warning('laravel-flow-admin: KPI/throughput window truncated', [
+                'window_start' => $start->format(DateTimeInterface::ATOM),
+                'window_end' => $end->format(DateTimeInterface::ATOM),
+                'runs_fetched' => count($runs),
+                'runs_total' => $total,
+            ]);
+        }
+
+        return $runs;
+    }
+
+    /**
+     * @param  list<DashboardRunSummary>  $runs
      * @return array{total:int, failed:int, success:int}
      */
-    private function runWindowRates(DateTimeImmutable $windowStart, DateTimeImmutable $windowEnd): array
+    private function windowRates(array $runs): array
     {
-        $rows = DB::table('flow_runs')
-            ->where('started_at', '>=', $this->dbTimestamp($windowStart))
-            ->where('started_at', '<', $this->dbTimestamp($windowEnd));
+        $failed = 0;
+        $success = 0;
 
-        $total = (clone $rows)->count('id');
-        $failed = (clone $rows)
-            ->whereIn('status', [self::STATUS_FAILED, self::STATUS_ABORTED])
-            ->count('id');
-        $success = (clone $rows)
-            ->where('status', self::STATUS_SUCCEEDED)
-            ->count('id');
+        foreach ($runs as $run) {
+            if (in_array($run->status, [self::STATUS_FAILED, self::STATUS_ABORTED], true)) {
+                $failed++;
+            } elseif ($run->status === self::STATUS_SUCCEEDED) {
+                $success++;
+            }
+        }
+
+        return ['total' => count($runs), 'failed' => $failed, 'success' => $success];
+    }
+
+    /**
+     * @param  list<DashboardRunSummary>  $runs
+     * @return array{avg:int, p95:int}
+     */
+    private function durationStats(array $runs): array
+    {
+        $durations = array_values(array_filter(
+            array_map(static fn (DashboardRunSummary $r): ?int => $r->durationMs, $runs),
+            static fn (?int $d): bool => $d !== null && $d > 0,
+        ));
+
+        if ($durations === []) {
+            return ['avg' => 0, 'p95' => 0];
+        }
 
         return [
-            'total' => (int) $total,
-            'failed' => (int) $failed,
-            'success' => (int) $success,
+            'avg' => (int) round(array_sum($durations) / count($durations)),
+            'p95' => $this->percentile($durations, 95),
         ];
     }
 
-    private function runQuery(): Builder
+    /**
+     * @param  list<StepSummary>  $steps
+     */
+    private function sumAttempts(array $steps): int
     {
-        return DB::table('flow_runs')->select([
-            'id',
-            'definition_name as definition_name',
-            'status',
-            'correlation_id',
-            'started_at',
-            'finished_at',
-            'duration_ms',
-        ]);
+        // Dashboard's StepSummary carries no per-step attempt count (core's
+        // read model does not expose retry-attempt tallies) — the old
+        // raw-SQL adapter's own $attempts argument to mapRunSummary() also
+        // just defaulted to the step count when not separately computed
+        // (see its `pendingApprovals`/list-view call sites), so this
+        // preserves that same fallback rather than inventing new precision
+        // the underlying data does not have.
+        return count($steps);
     }
 
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function runRowForId(string $runId): ?array
+    private function definitionNameMatchesFlow(string $definitionName, string $flowFilter): bool
     {
-        $row = $this->runQuery()->where('id', $runId)->first();
-
-        return $row === null ? null : (array) $row;
+        return str_starts_with($definitionName, $flowFilter . ':') || str_starts_with($definitionName, $flowFilter . '@');
     }
 
-    /**
-     * @param  array<string, mixed>  $run
-     */
-    private function mapRunSummary(array $run, int $stepCount = 0, ?int $attempts = null): RunSummary
+    private function runMatchesSearch(DashboardRunSummary $run, string $search): bool
     {
-        /** @var array{0: string, 1: string} $parts */
-        $parts = $this->splitFlowDefinition((string) $this->rowValue($run, 'definition_name', 'unknown'));
+        $needle = mb_strtolower($search);
 
-        $correlationId = (string) $this->rowValue($run, 'correlation_id', '');
-        $actor = $correlationId !== '' ? $correlationId : 'system';
+        return str_contains(mb_strtolower($run->id), $needle)
+            || str_contains(mb_strtolower($run->definitionName), $needle)
+            || str_contains(mb_strtolower((string) $run->correlationId), $needle);
+    }
+
+    private function approvalMatchesSearch(DashboardApprovalSummary $approval, string $search): bool
+    {
+        $needle = mb_strtolower($search);
+
+        return str_contains(mb_strtolower($approval->id), $needle)
+            || str_contains(mb_strtolower($approval->runId), $needle)
+            || str_contains(mb_strtolower($approval->stepName), $needle);
+    }
+
+    private function outboxMatchesSearch(DashboardWebhookOutboxSummary $outbox, string $search): bool
+    {
+        $needle = mb_strtolower($search);
+
+        return str_contains(mb_strtolower((string) $outbox->runId), $needle)
+            || str_contains(mb_strtolower($outbox->event), $needle);
+    }
+
+    private function mapRunSummary(DashboardRunSummary $run, int $stepCount, ?int $attempts = null): RunSummary
+    {
+        [$name, $version] = $this->splitFlowDefinition($run->definitionName);
+        $correlationId = (string) $run->correlationId;
 
         return new RunSummary(
-            id: (string) $this->rowValue($run, 'id', ''),
-            flowName: $parts[0],
-            flowVersion: $parts[1],
-            status: $this->toPublicStatus((string) $this->rowValue($run, 'status', self::STATUS_PENDING)),
-            actor: $actor,
+            id: $run->id,
+            flowName: $name,
+            flowVersion: $version,
+            status: $this->toPublicStatus($run->status),
+            actor: $correlationId !== '' ? $correlationId : 'system',
             correlationId: $correlationId,
-            startedAt: $this->immutableDate($this->rowValue($run, 'started_at')) ?? new DateTimeImmutable,
-            finishedAt: $this->immutableDate($this->rowValue($run, 'finished_at')),
-            durationMs: $this->rowValue($run, 'duration_ms') === null ? null : (int) $this->rowValue($run, 'duration_ms'),
+            startedAt: $run->startedAt ?? new DateTimeImmutable,
+            finishedAt: $run->finishedAt,
+            durationMs: $run->durationMs,
             stepCount: $stepCount,
             attemptsTotal: $attempts ?? $stepCount,
         );
     }
 
-    /**
-     * @param  array<string, mixed>  $row
-     */
-    private function mapApproval(array $row): ApprovalSummary
+    private function mapApproval(DashboardApprovalSummary $approval): ApprovalSummary
     {
-        $requestedAt = $this->immutableDate($this->rowValue($row, 'created_at'));
-        if ($requestedAt === null) {
-            $requestedAt = new DateTimeImmutable;
-        }
-
         return new ApprovalSummary(
-            tokenId: (string) $this->rowValue($row, 'id', ''),
-            runId: (string) $this->rowValue($row, 'run_id', ''),
-            stepName: (string) $this->rowValue($row, 'step_name', ''),
-            description: sprintf(
-                'Approval requested for %s',
-                (string) (($this->rowValue($row, 'step_name', '') !== '' ? $this->rowValue($row, 'step_name') : 'run')),
-            ),
-            status: $this->toPublicApprovalStatus((string) $this->rowValue($row, 'status', 'pending')),
-            requestedAt: $requestedAt,
-            approver: $this->actorFromJson($this->rowValue($row, 'actor')),
-            decidedAt: $this->immutableDate($this->rowValue($row, 'decided_at')),
+            tokenId: $approval->id,
+            runId: $approval->runId,
+            stepName: $approval->stepName,
+            description: sprintf('Approval requested for %s', $approval->stepName !== '' ? $approval->stepName : 'run'),
+            status: $this->toPublicApprovalStatus($approval->status),
+            requestedAt: $approval->issuedAt ?? new DateTimeImmutable,
+            approver: $this->extractActor($approval->actor ?? []),
+            decidedAt: $approval->decidedAt,
         );
     }
 
-    /**
-     * @param  array<string, mixed>  $row
-     */
-    private function mapOutbox(array $row): OutboxEntry
+    private function mapOutbox(DashboardWebhookOutboxSummary $outbox): OutboxEntry
     {
-        $runId = $this->rowValue($row, 'run_id');
-        $runIdString = $runId === null ? null : (string) $runId;
-        $destination = $runIdString === null || $runIdString === ''
-            ? (string) $this->rowValue($row, 'event', '')
-            : 'run:' . $runIdString;
+        $runId = $outbox->runId;
+        $destination = $runId === null || $runId === '' ? $outbox->event : 'run:' . $runId;
 
         return new OutboxEntry(
-            id: (string) $this->rowValue($row, 'id', ''),
-            eventType: (string) $this->rowValue($row, 'event', ''),
+            id: (string) $outbox->id,
+            eventType: $outbox->event,
             destination: $destination,
-            status: $this->toPublicWebhookStatus((string) $this->rowValue($row, 'status', 'pending')),
-            attempts: (int) $this->rowValue($row, 'attempts', 0),
-            nextAttemptAt: $this->immutableDate($this->rowValue($row, 'available_at')),
-            lastError: $this->rowValue($row, 'last_error') === null ? null : (string) $this->rowValue($row, 'last_error'),
+            status: $this->toPublicWebhookStatus($outbox->status),
+            attempts: $outbox->attempts,
+            nextAttemptAt: $outbox->availableAt,
+            lastError: $outbox->lastError,
         );
     }
 
-    /**
-     * @param  array<string, mixed>|object  $step
-     */
-    private function mapStep(array|object $step): Step
+    private function mapStep(StepSummary $step): Step
     {
-        $durationMs = $this->rowValue($step, 'durationMs') ?? $this->rowValue($step, 'duration_ms');
-
         return new Step(
-            name: (string) ($this->rowValue($step, 'name') ?? $this->rowValue($step, 'step_name', '')),
-            status: (string) $this->rowValue($step, 'status', ''),
-            startedAt: $this->immutableDate($this->rowValue($step, 'startedAt') ?? $this->rowValue($step, 'started_at')),
-            finishedAt: $this->immutableDate($this->rowValue($step, 'finishedAt') ?? $this->rowValue($step, 'finished_at')),
-            durationMs: $durationMs === null ? null : (int) $durationMs,
+            name: $step->name,
+            status: $step->status,
+            startedAt: $step->startedAt,
+            finishedAt: $step->finishedAt,
+            durationMs: $step->durationMs,
             attempts: 1,
             dependsOn: [],
-            errorMessage: $this->rowValue($step, 'errorMessage') ?? $this->rowValue($step, 'error_message'),
+            errorMessage: $step->errorMessage,
         );
     }
 
-    /**
-     * @param  array<string, mixed>|object  $event
-     */
-    private function mapAuditEvent(array|object $event): AuditEvent
+    private function mapAuditEvent(AuditEntry $event): AuditEvent
     {
         return new AuditEvent(
-            at: $this->immutableDate($this->rowValue($event, 'occurredAt') ?? $this->rowValue($event, 'occurred_at')) ?? new DateTimeImmutable,
-            type: (string) $this->rowValue($event, 'event', ''),
-            actor: (string) $this->rowValue($event, 'actor', 'system'),
-            payload: $this->safePayload($this->rowValue($event, 'payload')),
+            at: $event->occurredAt,
+            type: $event->event,
+            actor: 'system',
+            payload: $event->payload ?? [],
         );
     }
 
@@ -548,11 +677,7 @@ final readonly class EloquentReadModel implements ReadModel
 
     private function toWebhookStatus(?string $status): ?string
     {
-        if ($status === null || $status === '') {
-            return null;
-        }
-
-        return $status;
+        return $status === null || $status === '' ? null : $status;
     }
 
     private function toPublicWebhookStatus(string $status): string
@@ -561,66 +686,6 @@ final readonly class EloquentReadModel implements ReadModel
             'delivering' => 'pending',
             default => $status,
         };
-    }
-
-    /**
-     * @param  list<string>  $runIds
-     * @return array<string, int>
-     */
-    private function stepCountsByRunId(array $runIds): array
-    {
-        if ($runIds === []) {
-            return [];
-        }
-
-        $rows = DB::table('flow_steps')
-            ->selectRaw('run_id, COUNT(*) as step_count')
-            ->whereIn('run_id', $runIds)
-            ->groupBy('run_id')
-            ->get();
-
-        $counts = [];
-        foreach ($rows as $row) {
-            $counts[(string) $row->run_id] = (int) $row->step_count;
-        }
-
-        return $counts;
-    }
-
-    private function runStepCount(string $runId): int
-    {
-        return (int) DB::table('flow_steps')
-            ->where('run_id', $runId)
-            ->count('id');
-    }
-
-    /**
-     * @return array{avg:int, p95:int}
-     */
-    private function durationStatsForWindow(DateTimeImmutable $windowStart, DateTimeImmutable $windowEnd): array
-    {
-        /** @var list<int> $durations */
-        $durations = DB::table('flow_runs')
-            ->select('duration_ms')
-            ->where('started_at', '>=', $this->dbTimestamp($windowStart))
-            ->where('started_at', '<', $this->dbTimestamp($windowEnd))
-            ->whereNotNull('duration_ms')
-            ->pluck('duration_ms')
-            ->map(static fn (mixed $value): int => is_numeric($value) ? (int) $value : 0)
-            ->filter(static fn (int $value): bool => $value > 0)
-            ->values()
-            ->toArray();
-
-        if ($durations === []) {
-            return ['avg' => 0, 'p95' => 0];
-        }
-
-        $avg = (int) round(array_sum($durations) / count($durations));
-
-        return [
-            'avg' => $avg,
-            'p95' => $this->percentile($durations, 95),
-        ];
     }
 
     /**
@@ -649,46 +714,12 @@ final readonly class EloquentReadModel implements ReadModel
         return [$definition, 'v1.0'];
     }
 
-    private function immutableDate(mixed $value): ?DateTimeImmutable
+    private function extractActor(mixed $value): ?string
     {
-        if ($value instanceof DateTimeImmutable) {
-            return $value;
-        }
-
-        if ($value instanceof DateTimeInterface) {
-            return DateTimeImmutable::createFromInterface($value);
-        }
-
-        if (is_string($value) && $value !== '') {
-            return new DateTimeImmutable($value);
-        }
-
-        return null;
-    }
-
-    private function actorFromJson(mixed $value): string
-    {
-        if (is_string($value) && $value !== '') {
-            $decoded = json_decode($value, true);
-            if (is_array($decoded)) {
-                return $this->extractActor($decoded) ?? $value;
-            }
-
-            return $value;
-        }
-
         if (! is_array($value)) {
-            return '—';
+            return null;
         }
 
-        return $this->extractActor($value) ?? '—';
-    }
-
-    /**
-     * @param  array<mixed>  $value
-     */
-    private function extractActor(array $value): ?string
-    {
         foreach ($value as $candidate) {
             if (is_string($candidate) && $candidate !== '') {
                 return $candidate;
@@ -709,45 +740,9 @@ final readonly class EloquentReadModel implements ReadModel
         return null;
     }
 
-    /**
-     * @return array<string|int, mixed>
-     */
-    private function safePayload(mixed $payload): array
-    {
-        if (is_string($payload)) {
-            $decoded = json_decode($payload, true);
-            if (is_array($decoded)) {
-                return $decoded;
-            }
-        }
-
-        return is_array($payload) ? $payload : [];
-    }
-
     private function ratio(int $numerator, int $denominator): float
     {
         return $denominator > 0 ? $numerator / $denominator : 0.0;
-    }
-
-    private function dbTimestamp(DateTimeImmutable $value): string
-    {
-        return $value->format('Y-m-d H:i:s');
-    }
-
-    /**
-     * @param  array<string, mixed>|object  $row
-     */
-    private function rowValue(array|object $row, string $key, mixed $default = null): mixed
-    {
-        if (is_array($row) && array_key_exists($key, $row)) {
-            return $row[$key];
-        }
-
-        if (is_object($row) && property_exists($row, $key)) {
-            return $row->{$key};
-        }
-
-        return $default;
     }
 
     /**
@@ -763,23 +758,6 @@ final readonly class EloquentReadModel implements ReadModel
         $index = (int) ceil((count($values) - 1) * ($percentile / 100));
 
         return (int) $values[$index];
-    }
-
-    private function likePattern(string $value): string
-    {
-        $escaped = str_replace(['%', '_', '\\'], ['\\%', '\\_', '\\\\'], $value);
-
-        return "%{$escaped}%";
-    }
-
-    private function flowDefinitionLike(string $value): string
-    {
-        return $this->escapeLike($value) . '%';
-    }
-
-    private function escapeLike(string $value): string
-    {
-        return str_replace(['%', '_', '\\'], ['\\%', '\\_', '\\\\'], $value);
     }
 
     private function normalizePage(int $page): int

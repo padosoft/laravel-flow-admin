@@ -9,7 +9,7 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![PHP Version](https://img.shields.io/packagist/php-v/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![Laravel](https://img.shields.io/badge/Laravel-%5E13.0-ff2d20?style=flat-square&logo=laravel)](https://laravel.com)
-[![Tests](https://img.shields.io/badge/tests-101%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
+[![Tests](https://img.shields.io/badge/tests-111%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![E2E](https://img.shields.io/badge/playwright-chromium%20%7C%20firefox%20%7C%20webkit-45ba4b?style=flat-square&logo=playwright)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%208-brightgreen?style=flat-square)](https://phpstan.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-pint-7e22ce?style=flat-square)](https://laravel.com/docs/pint)
@@ -80,7 +80,7 @@
 - 🛡️ **Deny-by-default authorizer** — every mutation goes through your `ActionAuthorizer`. No accidents.
 - 🔁 **Auto-refreshing pages** — configurable polling (`/flow/api/live`).
 - 🧱 **Adapter pattern** — `eloquent` for prod, `array` for demos / E2E (deterministic seed-42 fixtures).
-- 🧪 **Battle-tested** — 101 PHPUnit tests, 18 Playwright scenarios across Chromium / Firefox / WebKit.
+- 🧪 **Battle-tested** — 111 PHPUnit tests, 7 Playwright scenarios (21 runs across Chromium / Firefox / WebKit).
 - 📦 **Zero-coupling** — built on a public `Contracts\*` surface; engine internals stay `@internal`.
 
 ---
@@ -113,11 +113,13 @@
 | --- | --- |
 | PHP | `^8.3` (also tested on 8.4) |
 | Laravel | `^13.0` |
-| [`padosoft/laravel-flow`](https://github.com/padosoft/laravel-flow) | `^1.0` |
+| [`padosoft/laravel-flow`](https://github.com/padosoft/laravel-flow) | `dev-main` (development-time — see note below) |
 | Node.js (only if you want to rebuild assets) | `>=20` |
 | Database | any Laravel-supported driver (or `array` adapter for demos) |
 
 > 💡 You **do not** need Node.js to use this package. Pre-built assets ship inside the package and are publishable via `vendor:publish`.
+
+> 🚧 **Development-time note**: this repo is mid-flight on the **Laravel Flow 2.0 program** (Macro E, Flow Studio UI). `padosoft/laravel-flow` has no v2 tagged release yet, so `composer.json` resolves it via a local `path` repository pointing at `../padosoft-laravel-flow` (a sibling checkout one directory up). That means `padosoft/laravel-flow-admin` is not `composer require`-able outside a monorepo-adjacent dev setup until core tags v2.0.0 — at which point this switches back to a normal SemVer range.
 
 ---
 
@@ -156,7 +158,7 @@ php artisan vendor:publish --tag=flow-migrations
 php artisan migrate
 ```
 
-This creates the `flow_runs`, `flow_steps`, `flow_approvals`, `flow_webhook_outbox` and related tables that this admin panel reads from.
+This creates the `flow_runs`, `flow_run_nodes`, `flow_approvals`, `flow_webhook_outbox`, `flow_definitions` and related tables that this admin panel reads from.
 
 > 📖 Full engine docs: [github.com/padosoft/laravel-flow](https://github.com/padosoft/laravel-flow)
 
@@ -280,8 +282,7 @@ Every mutation route (resume, reject, replay, cancel, retry-webhook) consults yo
 Public extension surface (semver-stable from `v0.1.0` →):
 
 - `Padosoft\LaravelFlowAdmin\Contracts\ActionAuthorizer`
-- `Padosoft\LaravelFlowAdmin\Contracts\ReadModelAdapter`
-- `Padosoft\LaravelFlowAdmin\Contracts\ViewModelFactory` (and family)
+- `Padosoft\LaravelFlowAdmin\Contracts\ReadModel`
 - `config/flow-admin.php` keys
 - Publish tags: `flow-admin-config`, `flow-admin-views`, `flow-admin-assets`
 - Route names: `flow-admin.*`
@@ -365,13 +366,15 @@ HTTP request
    │       ├─► ViewModels/*Factory      (read-side view assembly)
    │       └─► Contracts/ActionAuthorizer (gate for any mutation)
    │
-   ├─► Adapters/Eloquent | Array       (ReadModelAdapter implementations)
-   │       └─► reads flow_* tables OR seed-42 fixtures
+   ├─► Adapters/Eloquent | Array       (ReadModel implementations)
+   │       └─► reads flow_* tables (via core's Dashboard\FlowDashboardReadModel) OR seed-42 fixtures
    │
    └─► resources/views/* + Alpine stores + Vite bundle
 ```
 
-Design source-of-truth lives under `.design-source/project/` (pixel reference) and is enforced through Playwright visual regression on chromium / firefox / webkit.
+Design source-of-truth for the existing runs/approvals/outbox panel lives under `.design-source/project/` (pixel reference) and is enforced through Playwright visual regression on chromium / firefox / webkit. The Flow Studio UI (graph canvas, editor, live run monitor — Macro E, in progress) is being built against a separate template under `design/claude-design-template/`.
+
+> ℹ️ **Search & list scope**: the `eloquent` adapter reads through core's `Dashboard\FlowDashboardReadModel`, which only exposes single-field, exact-match filters (no free-text search, no distinct-name listing, no flow-name prefix match). Plain listing and single-status filtering use real server-side pagination and are **not** bounded — they reflect full history at any install size. Only a **free-text search** (or, on the runs list specifically, the compound `failed` status filter or a flow-name prefix filter) falls back to scanning the **200 most recent runs** rather than full history, since those queries can't be expressed as a single exact-match filter — the same bound `Dashboard\Pagination::MAX_PER_PAGE` already imposes on a single page. The definitions list shares this same 200-most-recent-runs bound (it derives flow names from recent run history). Installs with more than 200 runs since the oldest search match won't surface it; use direct DB access or a future `flow:*` Artisan command for full-history search. **KPIs and throughput buckets are not subject to this bound at all** — they page through every run in their rolling window (24h / 48h; logged, never silently truncated).
 
 ---
 
@@ -403,6 +406,7 @@ If you build with Claude Code or another agent, copy `.claude/` into your downst
 
 - [x] **v0.1** — core pages, eloquent + array adapters, theme cookie, ⌘K palette, Playwright matrix.
 - [x] **v0.1.1** — public release hardening, README polish, GitHub release artifacts.
+- [ ] **v2.0 (in progress)** — Flow Studio UI: read-only + editable graph canvas, versioning UI, live run monitor, working mutations, dry-run visualization, Advisor + AI Flow Builder UI. Tracked as Macro E of the Laravel Flow 2.0 program; ships once core (`padosoft/laravel-flow`) tags v2.0.0.
 - [ ] **v0.2** — bulk actions on runs, saved filter presets, CSV/JSON export.
 - [ ] **v0.3** — Pulse-style sparkline cards, alerting hooks.
 - [ ] **v1.0** — frozen public surface, SemVer guarantees, downstream-stable Adapters.
@@ -417,13 +421,13 @@ Every push runs through this gate (matrix `php: 8.3, 8.4` × `laravel: 13`):
 composer validate --strict --no-check-publish
 composer format:test          # Laravel Pint
 composer analyse              # PHPStan / Larastan level 8
-composer test                 # PHPUnit — 101 tests, 584 assertions
+composer test                 # PHPUnit — 111 tests, 606 assertions
 npm run lint                  # ESLint flat config
 npm run build                 # Vite build verification
 npm run test:e2e              # Playwright on chromium + firefox + webkit
 ```
 
-Latest local run: **101 tests / 584 assertions / 18 E2E scenarios passed**.
+Latest local run: **111 tests / 606 assertions / 21 E2E runs passed** (7 Playwright scenarios × 3 browsers).
 
 ---
 
