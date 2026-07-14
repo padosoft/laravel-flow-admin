@@ -83,4 +83,38 @@ final class ArrayReadModelTest extends TestCase
     {
         $this->assertNull((new ArrayReadModel)->graph('does-not-exist'));
     }
+
+    public function test_array_read_model_editable_graph_includes_unredacted_config(): void
+    {
+        $result = (new ArrayReadModel)->editableGraph('order_checkout_flow');
+
+        $this->assertNotNull($result);
+        $this->assertSame(1, $result['version']);
+        $this->assertSame('published', $result['status']);
+
+        $charge = null;
+        foreach ($result['graph']['nodes'] as $node) {
+            if ($node['id'] === 'charge') {
+                $charge = $node;
+            }
+        }
+
+        $this->assertNotNull($charge);
+        $this->assertSame(['api_key' => 'sk_test_fixture_do_not_leak'], $charge['config']);
+    }
+
+    public function test_array_read_model_returns_null_editable_graph_for_an_unknown_flow(): void
+    {
+        $this->assertNull((new ArrayReadModel)->editableGraph('does-not-exist'));
+    }
+
+    public function test_array_read_model_catalog_returns_all_fixture_node_types(): void
+    {
+        $catalog = (new ArrayReadModel)->catalog();
+
+        $this->assertSame(
+            ['demo.trigger', 'demo.validate', 'demo.charge', 'demo.notify'],
+            array_keys($catalog),
+        );
+    }
 }

@@ -9,7 +9,7 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![PHP Version](https://img.shields.io/packagist/php-v/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![Laravel](https://img.shields.io/badge/Laravel-%5E13.0-ff2d20?style=flat-square&logo=laravel)](https://laravel.com)
-[![Tests](https://img.shields.io/badge/tests-130%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
+[![Tests](https://img.shields.io/badge/tests-144%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![E2E](https://img.shields.io/badge/playwright-chromium%20%7C%20firefox%20%7C%20webkit-45ba4b?style=flat-square&logo=playwright)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%208-brightgreen?style=flat-square)](https://phpstan.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-pint-7e22ce?style=flat-square)](https://laravel.com/docs/pint)
@@ -75,12 +75,13 @@
 - ✅ **Approvals inbox** — pending decisions with one-click approve / reject through your own authorizer.
 - 📤 **Webhook outbox** — delivery state, replay failed jobs, inspect headers/payloads.
 - 📋 **Flow definitions** — registered workflows, version, last activity at a glance.
+- 🧩 **Flow Studio canvas** — React + `@xyflow/react` visual graph: read-only view of a flow's published version, plus a full drag-and-drop editor (palette from the node catalog, typed-connection validation, node inspector, save-as-draft) gated by your `ActionAuthorizer`.
 - ⚡ **⌘K command palette** — jump anywhere in two keystrokes.
 - 🎨 **Pixel-perfect dark + light themes** — persisted in cookie, switchable per user.
 - 🛡️ **Deny-by-default authorizer** — every mutation goes through your `ActionAuthorizer`. No accidents.
 - 🔁 **Auto-refreshing pages** — configurable polling (`/flow/api/live`).
 - 🧱 **Adapter pattern** — `eloquent` for prod, `array` for demos / E2E (deterministic seed-42 fixtures).
-- 🧪 **Battle-tested** — 130 PHPUnit tests, 10 Playwright scenarios (30 runs across Chromium / Firefox / WebKit — 27 pass, 3 visual-gated skipped).
+- 🧪 **Battle-tested** — 144 PHPUnit tests, 16 Playwright scenarios (48 runs across Chromium / Firefox / WebKit — 44 pass, 4 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation).
 - 📦 **Zero-coupling** — built on a public `Contracts\*` surface; engine internals stay `@internal`.
 
 ---
@@ -277,7 +278,9 @@ All keys live in `config/flow-admin.php`. They are also overridable via environm
 
 ## 🔒 Authorization (mutations)
 
-Every mutation route (resume, reject, replay, cancel, retry-webhook) consults your `ActionAuthorizer` **before** the controller runs. This is non-negotiable: there is no "global admin" bypass and no way to short-circuit the gate from a Blade view.
+Every mutation route (resume, reject, replay, cancel, retry-webhook, Studio's edit-graph load and draft save) consults your `ActionAuthorizer` **before** the controller runs. This is non-negotiable: there is no "global admin" bypass and no way to short-circuit the gate from a Blade view.
+
+`ActionAuthorizer::canEditDefinition()` gates two Studio editor routes: loading a flow's UNREDACTED graph (`GET /studio/{name}/edit-graph`, node `config` included — unlike the read-only canvas's `graph()` endpoint, which redacts it) and saving an edited graph as a new draft (`POST /studio/{name}/draft`). The default `DenyAllAuthorizer` denies both; ship your own `ActionAuthorizer` (or set `FLOW_ADMIN_AUTHORIZER=allow` for local dev/E2E — see `AllowAllAuthorizer`, dev-only, never production) to enable Studio editing.
 
 Public extension surface (semver-stable from `v0.1.0` →):
 
@@ -330,7 +333,7 @@ For showcases, screenshots, or end-to-end tests you can bypass the database enti
 FLOW_ADMIN_ADAPTER=array
 ```
 
-The `ArrayReadModelAdapter` produces deterministic fixtures (`seed=42`) so KPI numbers, run IDs and timelines are reproducible across screenshots and Playwright runs.
+The `ArrayReadModelAdapter` produces deterministic fixtures (`seed=42`) so KPI numbers, run IDs and timelines are reproducible across screenshots and Playwright runs. In this mode, the package also registers 4 real node handler classes (`demo.trigger`/`demo.validate`/`demo.charge`/`demo.notify`) matching the fixture graph's node types, so the Studio editor's save-as-draft flow validates and persists successfully against the demo fixture — a production Eloquent deployment's node catalog stays free of this demo-only noise.
 
 ---
 
@@ -342,8 +345,12 @@ All routes live under the configured prefix (default `/flow`) and the `flow-admi
 | --- | --- | --- | --- |
 | `GET` | `/` | `flow-admin.overview` | Dashboard |
 | `GET` | `/studio` | `flow-admin.studio` | Flow Studio — flow definitions list, links into each one's canvas |
-| `GET` | `/studio/{name}` | `flow-admin.studio.show` | Read-only graph canvas (React + `@xyflow/react`) for a flow's latest published version — editing lands in a later Macro E subtask |
-| `GET` | `/studio/{name}/graph` | `flow-admin.studio.graph` | JSON API backing the canvas: `{graph, catalog}`, or 404 when nothing is published yet |
+| `GET` | `/studio/{name}` | `flow-admin.studio.show` | Read-only graph canvas (React + `@xyflow/react`) for a flow's latest published version |
+| `GET` | `/studio/{name}/graph` | `flow-admin.studio.graph` | JSON API backing the read-only canvas: `{graph, catalog}` (node `config` redacted), or 404 when nothing is published yet |
+| `GET` | `/studio/catalog` | `flow-admin.studio.catalog` | JSON API: the full node-type catalog for the editor's palette (not scoped to a single flow) |
+| `GET` | `/studio/{name}/edit` | `flow-admin.studio.edit` | Studio editor shell — palette, drag & drop, typed-connection validation, node inspector, save-as-draft |
+| `GET` | `/studio/{name}/edit-graph` | `flow-admin.studio.edit-graph` | JSON API backing the editor: `{graph, catalog, version, status}` with node `config` INCLUDED (unredacted) — gated by `ActionAuthorizer::canEditDefinition()`, deny-by-default |
+| `POST` | `/studio/{name}/draft` | `flow-admin.studio.draft` | Saves the edited graph as a new draft version; server re-validates structurally and semantically (`GraphValidator`) before persisting — gated by `ActionAuthorizer::canEditDefinition()` |
 | `GET` | `/runs` | `flow-admin.runs.index` | Runs list |
 | `GET` | `/runs/{id}` | `flow-admin.runs.show` | Run detail + timeline |
 | `GET` | `/approvals` | `flow-admin.approvals.index` | Approvals inbox |
@@ -397,13 +404,13 @@ If you build with Claude Code or another agent, copy `.claude/` into your downst
 
 ## ⚖️ Comparison
 
-| Tool | Workflow runs lifecycle | Approvals UI | Webhook outbox | Drop-in for Laravel Flow |
-| --- | :---: | :---: | :---: | :---: |
-| **Laravel Flow Admin** | ✅ | ✅ | ✅ | ✅ |
-| Laravel Horizon | ⚠️ queue/job only | ❌ | ❌ | ❌ |
-| Laravel Pulse | ⚠️ app metrics | ❌ | ❌ | ❌ |
-| Custom dashboard | depends | depends | depends | ⏳ slow to bootstrap |
-| Temporal UI | ✅ (for Temporal) | ✅ | ⚠️ | ❌ |
+| Tool | Workflow runs lifecycle | Approvals UI | Webhook outbox | Visual flow editor | Drop-in for Laravel Flow |
+| --- | :---: | :---: | :---: | :---: | :---: |
+| **Laravel Flow Admin** | ✅ | ✅ | ✅ | ✅ drag & drop, typed-connection validation, save-as-draft (E-PR3) | ✅ |
+| Laravel Horizon | ⚠️ queue/job only | ❌ | ❌ | ❌ | ❌ |
+| Laravel Pulse | ⚠️ app metrics | ❌ | ❌ | ❌ | ❌ |
+| Custom dashboard | depends | depends | depends | depends | ⏳ slow to bootstrap |
+| Temporal UI | ✅ (for Temporal) | ✅ | ⚠️ | ❌ workflows are defined in code, not visually composed | ❌ |
 
 ---
 
@@ -426,13 +433,13 @@ Every push runs through this gate (matrix `php: 8.3, 8.4` × `laravel: 13`):
 composer validate --strict --no-check-publish
 composer format:test          # Laravel Pint
 composer analyse              # PHPStan / Larastan level 8
-composer test                 # PHPUnit — 130 tests, 692 assertions
+composer test                 # PHPUnit — 144 tests, 763 assertions
 npm run lint                  # ESLint flat config
 npm run build                 # Vite build verification
 npm run test:e2e              # Playwright on chromium + firefox + webkit
 ```
 
-Latest local run: **130 tests / 692 assertions / 27 E2E runs passed** (10 Playwright scenarios × 3 browsers, 3 visual-gated skipped).
+Latest local run: **144 tests / 763 assertions / 44 E2E runs passed** (16 Playwright scenarios × 3 browsers, 4 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation).
 
 ---
 

@@ -5,12 +5,17 @@ providers:
 
 # Env block runs *after* Dotenv via Orchestra\Testbench\Foundation\Bootstrap\
 # LoadEnvironmentVariablesFromArray, so it always wins over the testbench-core
-# bundled .env. We use it for two dev-only overrides:
+# bundled .env. We use it for dev-only overrides:
 #   - FLOW_ADMIN_MIDDLEWARE=web → drop the `auth` middleware so the smoke spec
 #     does not need to seed an authenticated session. Production stays on
 #     `web,auth` because production deployments do not ship testbench.yaml.
 #   - FLOW_ADMIN_ADAPTER=array  → use the deterministic seed-42 fixtures from
 #     Macro 4 onward; until then the value is ignored.
+#   - FLOW_ADMIN_AUTHORIZER=allow → opt into AllowAllAuthorizer (E-PR3) so
+#     Playwright can exercise the Studio editor's save-as-draft flow
+#     end-to-end. Production never sets this — the shipped default stays
+#     deny-by-default (see config/flow-admin.php).
 env:
   FLOW_ADMIN_MIDDLEWARE: web
   FLOW_ADMIN_ADAPTER: array
+  FLOW_ADMIN_AUTHORIZER: allow

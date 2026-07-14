@@ -94,4 +94,31 @@ interface ReadModel
      * @return null|array{graph: array<string, mixed>, catalog: array<string, array<string, mixed>>}
      */
     public function graph(string $name): ?array;
+
+    /**
+     * The latest version of a flow definition — draft OR published, NOT
+     * status-filtered like {@see self::graph()} — with every node's
+     * `config` INCLUDED, for the Studio editor to load into the canvas.
+     * `null` when the definition doesn't exist yet (a brand-new flow name
+     * starts from an empty canvas client-side, not from this method).
+     *
+     * Unlike {@see self::graph()}, `config` is deliberately NOT redacted:
+     * the editor needs real values to populate its property/inspector
+     * panels. Callers MUST gate this behind
+     * `ActionAuthorizer::canEditDefinition()` — it is never reachable
+     * through the read-only canvas's route.
+     *
+     * @return null|array{graph: array<string, mixed>, catalog: array<string, array<string, mixed>>, version: int, status: string}
+     */
+    public function editableGraph(string $name): ?array;
+
+    /**
+     * The full node-type catalog for the Studio editor's palette — every
+     * node type the engine (or, in `array` demo mode, the fixture) exposes,
+     * NOT scoped to a single graph's used types like {@see self::graph()}'s
+     * `catalog` (which stays small on purpose for the read-only response).
+     *
+     * @return array<string, array<string, mixed>> node type => `NodeDefinition::toArray()`'s rendering-relevant subset, same shape as graph()'s catalog entries
+     */
+    public function catalog(): array;
 }

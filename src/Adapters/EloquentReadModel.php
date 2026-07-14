@@ -416,7 +416,60 @@ final readonly class EloquentReadModel implements ReadModel
             return null;
         }
 
-        $nodes = $stored->graph['nodes'] ?? null;
+        return [
+            'graph' => GraphRedactor::stripNodeConfig($stored->graph),
+            'catalog' => $this->catalogForUsedNodeTypes($stored->graph),
+        ];
+    }
+
+    public function editableGraph(string $name): ?array
+    {
+        try {
+            // No status filter (unlike graph()): the editor resumes
+            // whatever the latest version is, draft or published, so a
+            // save-as-draft continues from where the flow's author left
+            // off rather than always re-branching from the published one.
+            $stored = $this->definitions->latest($name);
+        } catch (Throwable $e) {
+            Log::warning('laravel-flow-admin: failed to resolve the latest graph for a flow definition', [
+                'name' => $name,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if ($stored === null) {
+            return null;
+        }
+
+        return [
+            'graph' => $stored->graph,
+            'catalog' => $this->catalogForUsedNodeTypes($stored->graph),
+            'version' => $stored->version,
+            'status' => $stored->status,
+        ];
+    }
+
+    public function catalog(): array
+    {
+        $catalog = [];
+
+        foreach ($this->nodeRegistry->all() as $type => $definition) {
+            $catalog[$type] = $this->nodeDefinitionToArray($definition);
+        }
+
+        return $catalog;
+    }
+
+    /**
+     * @param  array<string, mixed>  $graph  a `GraphSerializer::toArray()` envelope
+     * @return array<string, array<string, mixed>>
+     */
+    private function catalogForUsedNodeTypes(array $graph): array
+    {
+        $nodes = $graph['nodes'] ?? null;
         $usedTypes = is_array($nodes)
             ? array_unique(array_values(array_filter(array_map(
                 static fn (mixed $node): ?string => is_array($node) && is_string($node['type'] ?? null) ? $node['type'] : null,
@@ -424,10 +477,10 @@ final readonly class EloquentReadModel implements ReadModel
             ))))
             : [];
 
-        // Deliberately outside the try/catch above: NodeRegistry::has()/
+        // Deliberately outside any DefinitionRepository try/catch: NodeRegistry::has()/
         // get() are in-memory array lookups over types registered at boot
-        // time, not I/O — they don't throw, so there's nothing here for
-        // the fail-closed-to-404 handling to catch.
+        // time, not I/O — they don't throw, so there's nothing here for a
+        // fail-closed-to-404 handler to catch.
         $catalog = [];
         foreach ($usedTypes as $type) {
             if (! $this->nodeRegistry->has($type)) {
@@ -437,10 +490,7 @@ final readonly class EloquentReadModel implements ReadModel
             $catalog[$type] = $this->nodeDefinitionToArray($this->nodeRegistry->get($type));
         }
 
-        return [
-            'graph' => GraphRedactor::stripNodeConfig($stored->graph),
-            'catalog' => $catalog,
-        ];
+        return $catalog;
     }
 
     /**

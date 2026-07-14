@@ -8,19 +8,19 @@
     <div class="page page-studio">
         <div class="page-head">
             <div>
-                <h1 class="page-title">{{ $flowName }}</h1>
-                <p class="page-sub">Read-only canvas — the published graph.</p>
+                <h1 class="page-title">Edit {{ $flowName }}</h1>
+                <p class="page-sub">Drag nodes from the palette, connect ports, edit config, then save as a new draft version.</p>
             </div>
-            <a href="{{ route('flow-admin.studio.edit', ['name' => $flowName]) }}" class="btn" data-testid="studio-edit-link">
-                Edit
-            </a>
         </div>
 
         <div
             id="flow-studio-root"
             data-testid="flow-studio-root"
+            data-mode="edit"
             data-flow-name="{{ $flowName }}"
-            data-graph-url="{{ route('flow-admin.studio.graph', ['name' => $flowName]) }}"
+            data-edit-graph-url="{{ route('flow-admin.studio.edit-graph', ['name' => $flowName]) }}"
+            data-catalog-url="{{ route('flow-admin.studio.catalog') }}"
+            data-draft-url="{{ route('flow-admin.studio.draft', ['name' => $flowName]) }}"
             style="width: 100%; height: 70vh;"
         ></div>
     </div>

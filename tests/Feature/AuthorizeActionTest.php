@@ -79,4 +79,9 @@ final class AllowAllAuthorizer implements ActionAuthorizer
     {
         return true;
     }
+
+    public function canEditDefinition(string $flowName, ?array $actor): bool
+    {
+        return true;
+    }
 }

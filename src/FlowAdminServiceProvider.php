@@ -16,6 +16,10 @@ use Padosoft\LaravelFlowAdmin\Adapters\EloquentReadModel;
 use Padosoft\LaravelFlowAdmin\Authorizers\DenyAllAuthorizer;
 use Padosoft\LaravelFlowAdmin\Contracts\ActionAuthorizer;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
+use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoChargeNode;
+use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoNotifyNode;
+use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoTriggerNode;
+use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoValidateNode;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\AdminCssController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\StudioCssController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\StudioJsController;
@@ -75,6 +79,8 @@ class FlowAdminServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->registerDemoNodesIfInDemoMode();
+
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'flow-admin');
 
         // Register file-based (anonymous) Blade components under the
@@ -160,6 +166,47 @@ class FlowAdminServiceProvider extends ServiceProvider
      * prefix marks it as a package-internal route, away from the
      * user-facing `/flow` namespace.
      */
+    /**
+     * `ArrayReadModel`'s fixture graph/catalog reference node types
+     * (`demo.trigger`, `demo.validate`, `demo.charge`, `demo.notify`) that
+     * only exist as fixture DATA, not as real `NodeRegistry` entries.
+     * `GraphValidator` (used by `StudioController::storeDraft()`, always
+     * on the real registry regardless of `flow-admin.adapter`) would
+     * reject every Studio-composed graph in demo mode as "unknown node
+     * type" without this. Registering real handler classes for them ONLY
+     * when `adapter === 'array'` keeps a production Eloquent deployment's
+     * `NodeRegistry` free of demo/fixture noise — those deployments
+     * register their own real node types via the host app.
+     */
+    private function registerDemoNodesIfInDemoMode(): void
+    {
+        if (strtolower((string) $this->app->make('config')->get('flow-admin.adapter', 'eloquent')) !== 'array') {
+            return;
+        }
+
+        $registry = $this->app->make(NodeRegistry::class);
+
+        // register() throws DuplicateNodeTypeException on a second call
+        // for the same type — guard per type rather than registerMany(),
+        // since boot() can plausibly observe an already-populated registry
+        // (e.g. a host app registering the same handler class itself, or
+        // a future test/console context that boots this provider twice).
+        $handlers = [
+            'demo.trigger' => DemoTriggerNode::class,
+            'demo.validate' => DemoValidateNode::class,
+            'demo.charge' => DemoChargeNode::class,
+            'demo.notify' => DemoNotifyNode::class,
+        ];
+
+        foreach ($handlers as $type => $handlerClass) {
+            if ($registry->has($type)) {
+                continue;
+            }
+
+            $registry->register($handlerClass);
+        }
+    }
+
     private function registerPackagedAssetRoutes(): void
     {
         Route::get('/_flow-admin/assets/admin.css', AdminCssController::class)

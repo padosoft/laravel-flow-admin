@@ -7,6 +7,7 @@ namespace Padosoft\LaravelFlowAdmin\Adapters;
 use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
+use Padosoft\LaravelFlow\Graph\StoredDefinition;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ApprovalSummary;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\AuditEvent;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\FlowDefinition;
@@ -396,74 +397,110 @@ final class ArrayReadModel implements ReadModel
         }
 
         return [
-            'graph' => GraphRedactor::stripNodeConfig([
-                'schema_version' => 1,
-                'kind' => 'laravel-flow',
-                'metadata' => [],
-                'nodes' => [
-                    ['id' => 'start', 'type' => 'demo.trigger', 'config' => [], 'position' => ['x' => 0, 'y' => 0]],
-                    ['id' => 'validate', 'type' => 'demo.validate', 'config' => [], 'position' => ['x' => 260, 'y' => 0]],
-                    // Non-empty config here, on purpose: it is the fixture that
-                    // proves GraphRedactor::stripNodeConfig() actually strips a
-                    // secret-shaped key before this envelope reaches the browser.
-                    ['id' => 'charge', 'type' => 'demo.charge', 'config' => ['api_key' => 'sk_test_fixture_do_not_leak'], 'position' => ['x' => 520, 'y' => 0]],
-                    ['id' => 'notify', 'type' => 'demo.notify', 'config' => [], 'position' => ['x' => 780, 'y' => 0]],
+            'graph' => GraphRedactor::stripNodeConfig($this->fixtureGraphEnvelope()),
+            'catalog' => $this->fixtureCatalog(),
+        ];
+    }
+
+    public function editableGraph(string $name): ?array
+    {
+        if (! $this->matchesFixtureFlow($name, 'order_checkout_flow')) {
+            return null;
+        }
+
+        return [
+            'graph' => $this->fixtureGraphEnvelope(),
+            'catalog' => $this->fixtureCatalog(),
+            'version' => 1,
+            'status' => StoredDefinition::STATUS_PUBLISHED,
+        ];
+    }
+
+    public function catalog(): array
+    {
+        return $this->fixtureCatalog();
+    }
+
+    /**
+     * @return array<string, mixed> a `GraphSerializer::toArray()`-shaped envelope
+     */
+    private function fixtureGraphEnvelope(): array
+    {
+        return [
+            'schema_version' => 1,
+            'kind' => 'laravel-flow',
+            'metadata' => [],
+            'nodes' => [
+                ['id' => 'start', 'type' => 'demo.trigger', 'config' => [], 'position' => ['x' => 0, 'y' => 0]],
+                ['id' => 'validate', 'type' => 'demo.validate', 'config' => [], 'position' => ['x' => 260, 'y' => 0]],
+                // Non-empty config here, on purpose: it is the fixture that
+                // proves GraphRedactor::stripNodeConfig() actually strips a
+                // secret-shaped key before graph() (but not editableGraph())
+                // returns it.
+                ['id' => 'charge', 'type' => 'demo.charge', 'config' => ['api_key' => 'sk_test_fixture_do_not_leak'], 'position' => ['x' => 520, 'y' => 0]],
+                ['id' => 'notify', 'type' => 'demo.notify', 'config' => [], 'position' => ['x' => 780, 'y' => 0]],
+            ],
+            'connections' => [
+                ['sourceNodeId' => 'start', 'sourcePortKey' => 'out', 'targetNodeId' => 'validate', 'targetPortKey' => 'in'],
+                ['sourceNodeId' => 'validate', 'sourcePortKey' => 'valid', 'targetNodeId' => 'charge', 'targetPortKey' => 'authorized'],
+                ['sourceNodeId' => 'charge', 'sourcePortKey' => 'receipt', 'targetNodeId' => 'notify', 'targetPortKey' => 'message'],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private function fixtureCatalog(): array
+    {
+        return [
+            'demo.trigger' => [
+                'type' => 'demo.trigger',
+                'name' => 'Order Received',
+                'category' => 'trigger',
+                'icon' => 'play',
+                'description' => 'Starts the checkout flow.',
+                'inputs' => [],
+                'outputs' => [
+                    ['key' => 'out', 'type' => 'json', 'required' => false, 'label' => 'Order payload', 'multiple' => false],
                 ],
-                'connections' => [
-                    ['sourceNodeId' => 'start', 'sourcePortKey' => 'out', 'targetNodeId' => 'validate', 'targetPortKey' => 'in'],
-                    ['sourceNodeId' => 'validate', 'sourcePortKey' => 'valid', 'targetNodeId' => 'charge', 'targetPortKey' => 'authorized'],
-                    ['sourceNodeId' => 'charge', 'sourcePortKey' => 'receipt', 'targetNodeId' => 'notify', 'targetPortKey' => 'message'],
+            ],
+            'demo.validate' => [
+                'type' => 'demo.validate',
+                'name' => 'Validate Order',
+                'category' => 'logic',
+                'icon' => 'check',
+                'description' => 'Validates the order payload.',
+                'inputs' => [
+                    ['key' => 'in', 'type' => 'json', 'required' => true, 'label' => 'Order payload', 'multiple' => false],
                 ],
-            ]),
-            'catalog' => [
-                'demo.trigger' => [
-                    'type' => 'demo.trigger',
-                    'name' => 'Order Received',
-                    'category' => 'trigger',
-                    'icon' => 'play',
-                    'description' => 'Starts the checkout flow.',
-                    'inputs' => [],
-                    'outputs' => [
-                        ['key' => 'out', 'type' => 'json', 'required' => false, 'label' => 'Order payload', 'multiple' => false],
-                    ],
+                'outputs' => [
+                    ['key' => 'valid', 'type' => 'bool', 'required' => false, 'label' => 'Is valid', 'multiple' => false],
                 ],
-                'demo.validate' => [
-                    'type' => 'demo.validate',
-                    'name' => 'Validate Order',
-                    'category' => 'logic',
-                    'icon' => 'check',
-                    'description' => 'Validates the order payload.',
-                    'inputs' => [
-                        ['key' => 'in', 'type' => 'json', 'required' => true, 'label' => 'Order payload', 'multiple' => false],
-                    ],
-                    'outputs' => [
-                        ['key' => 'valid', 'type' => 'bool', 'required' => false, 'label' => 'Is valid', 'multiple' => false],
-                    ],
+            ],
+            'demo.charge' => [
+                'type' => 'demo.charge',
+                'name' => 'Charge Payment',
+                'category' => 'payment',
+                'icon' => 'send',
+                'description' => 'Charges the customer.',
+                'inputs' => [
+                    ['key' => 'authorized', 'type' => 'bool', 'required' => true, 'label' => 'Authorized', 'multiple' => false],
                 ],
-                'demo.charge' => [
-                    'type' => 'demo.charge',
-                    'name' => 'Charge Payment',
-                    'category' => 'payment',
-                    'icon' => 'send',
-                    'description' => 'Charges the customer.',
-                    'inputs' => [
-                        ['key' => 'authorized', 'type' => 'bool', 'required' => true, 'label' => 'Authorized', 'multiple' => false],
-                    ],
-                    'outputs' => [
-                        ['key' => 'receipt', 'type' => 'text', 'required' => false, 'label' => 'Receipt id', 'multiple' => false],
-                    ],
+                'outputs' => [
+                    ['key' => 'receipt', 'type' => 'text', 'required' => false, 'label' => 'Receipt id', 'multiple' => false],
                 ],
-                'demo.notify' => [
-                    'type' => 'demo.notify',
-                    'name' => 'Notify Customer',
-                    'category' => 'notification',
-                    'icon' => 'bell',
-                    'description' => 'Sends a confirmation.',
-                    'inputs' => [
-                        ['key' => 'message', 'type' => 'text', 'required' => true, 'label' => 'Message', 'multiple' => false],
-                    ],
-                    'outputs' => [],
+            ],
+            'demo.notify' => [
+                'type' => 'demo.notify',
+                'name' => 'Notify Customer',
+                'category' => 'notification',
+                'icon' => 'bell',
+                'description' => 'Sends a confirmation.',
+                'inputs' => [
+                    ['key' => 'message', 'type' => 'text', 'required' => true, 'label' => 'Message', 'multiple' => false],
                 ],
+                'outputs' => [],
             ],
         ];
     }

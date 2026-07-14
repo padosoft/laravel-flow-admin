@@ -13,8 +13,19 @@
  * `env()` helper to see overrides under Testbench: it is applied after the
  * bundled `vendor/orchestra/testbench-core/laravel/.env` Dotenv load, so it
  * always wins over the pre-set defaults there. We also pass
- * `FLOW_ADMIN_MIDDLEWARE=web` and `FLOW_ADMIN_ADAPTER=array` on the spawned
- * PHP process environment below for belt-and-suspenders.
+ * `FLOW_ADMIN_MIDDLEWARE=web`, `FLOW_ADMIN_ADAPTER=array`, and
+ * `FLOW_ADMIN_AUTHORIZER=allow` on the spawned PHP process environment below
+ * for belt-and-suspenders.
+ *
+ * Database: before serving, this script migrates core's (`padosoft/laravel-flow`)
+ * tables into a fresh, persistent SQLite file (`storage/testing/flow-admin-e2e.sqlite`,
+ * recreated on every run) and points `DB_DATABASE` at it for BOTH the migrate
+ * step and the served app. A real file, not `:memory:`, is required: PHP's
+ * built-in dev server spawns a fresh process per request, which would wipe
+ * an in-memory database between every HTTP request. This is what lets the
+ * Studio editor's "save as draft" E2E scenario (E-PR3) actually persist —
+ * `Contracts\DefinitionRepository` is core's own binding and is NOT
+ * swappable via `FLOW_ADMIN_ADAPTER` the way `ReadModel` is.
  *
  * Cross-platform launcher:
  *   - POSIX: `spawn('php', ['vendor/bin/testbench', 'serve', …])`.
@@ -22,14 +33,23 @@
  *     cmd.exe handles PATH/PATHEXT lookup for `php` and tolerates spaces in
  *     the repository path (which Node's bare spawn cannot).
  */
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
 const testbench = resolve(repoRoot, 'vendor/bin/testbench');
+
+// A real, persistent SQLite file (not `:memory:`, which PHP's built-in
+// dev server — a fresh process per request — would wipe between every
+// HTTP request) so E-PR3's Studio editor "save as draft" flow has a real
+// `flow_definitions` table to write into during Playwright E2E runs.
+// `storage/` is git-ignored package-wide; recreated fresh on every run
+// for a clean E2E state, same spirit as the `array` ReadModel adapter's
+// deterministic seed-42 fixtures for reads.
+const e2eDatabasePath = resolve(repoRoot, 'storage/testing/flow-admin-e2e.sqlite');
 
 // Single source of truth: when FLOW_ADMIN_E2E_BASE_URL is set, derive host
 // and port from it so the webServer Playwright polls (`url`) and the
@@ -67,7 +87,39 @@ const env = {
   ...process.env,
   FLOW_ADMIN_MIDDLEWARE: process.env.FLOW_ADMIN_MIDDLEWARE ?? 'web',
   FLOW_ADMIN_ADAPTER: process.env.FLOW_ADMIN_ADAPTER ?? 'array',
+  FLOW_ADMIN_AUTHORIZER: process.env.FLOW_ADMIN_AUTHORIZER ?? 'allow',
+  DB_CONNECTION: 'sqlite',
+  DB_DATABASE: e2eDatabasePath,
 };
+
+mkdirSync(dirname(e2eDatabasePath), { recursive: true });
+rmSync(e2eDatabasePath, { force: true });
+writeFileSync(e2eDatabasePath, '');
+
+const migrationArgs = [
+  'migrate',
+  '--path=vendor/padosoft/laravel-flow/database/migrations',
+  '--realpath',
+  '--force',
+];
+
+const migration =
+  process.platform === 'win32'
+    ? spawnSync(
+        'cmd.exe',
+        ['/d', '/s', '/c', `php "${testbench}" ${migrationArgs.join(' ')}`],
+        { cwd: repoRoot, stdio: 'inherit', env, windowsVerbatimArguments: true },
+      )
+    : spawnSync('php', [testbench, ...migrationArgs], { cwd: repoRoot, stdio: 'inherit', env });
+
+if (migration.status !== 0) {
+  console.error(
+    `[serve-testbench] Migrating core's tables into ${e2eDatabasePath} failed ` +
+      `(exit ${migration.status}) — the Studio editor's save-as-draft E2E scenario ` +
+      'needs a real flow_definitions table. Aborting before starting the server.',
+  );
+  process.exit(migration.status ?? 1);
+}
 
 let child;
 if (process.platform === 'win32') {
