@@ -158,6 +158,10 @@ test.describe('flow-admin studio editor (E-PR3 canvas editor)', () => {
     // which Playwright's actionability check otherwise treats as
     // "obscured"; onNodeClick still fires correctly underneath it.
     await validateNode.click({ force: true });
+    // Deleting a node now confirms first (window.confirm) — Playwright
+    // auto-dismisses unhandled dialogs, which would make confirm() return
+    // false and silently no-op the delete, so accept it explicitly.
+    page.once('dialog', (dialog) => dialog.accept());
     await page.getByTestId('studio-delete-node-button').click();
     await expect(page.locator('.react-flow__node')).toHaveCount(1);
     await expect(page.locator('.react-flow__edge')).toHaveCount(0);

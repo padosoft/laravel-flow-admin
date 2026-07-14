@@ -579,10 +579,21 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
   // deleted via this button prunes its connected edges identically.
   const onDeleteNode = useCallback(
     (nodeId) => {
+      // Explicit confirmation before a destructive action (rule-admin-ajax-pattern):
+      // nothing is persisted until the user explicitly clicks "Save as
+      // draft" afterward, but the canvas edit itself is otherwise
+      // undoable-only-by-reload, so a one-click delete still warrants a
+      // confirm.
+      const node = state.nodes.find((n) => n.id === nodeId);
+      const label = node?.data.label ?? nodeId;
+      if (!window.confirm(`Delete node "${label}"? This cannot be undone.`)) {
+        return;
+      }
+
       onNodesChange([{ type: 'remove', id: nodeId }]);
       setSelectedNodeId(null);
     },
-    [onNodesChange],
+    [state.nodes, onNodesChange],
   );
 
   const onSave = useCallback(() => {
