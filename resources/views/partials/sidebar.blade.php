@@ -16,6 +16,7 @@
 
     $primary = [
         ['key' => 'home',        'label' => 'Overview',    'icon' => 'home',        'badge' => null,                        'url' => route('flow-admin.overview')],
+        ['key' => 'studio',      'label' => 'Studio',      'icon' => 'sparkle',     'badge' => null,                        'url' => route('flow-admin.studio')],
         ['key' => 'runs',        'label' => 'Runs',        'icon' => 'runs',        'badge' => $counts['running']   ?? null, 'url' => route('flow-admin.runs.index')],
         ['key' => 'approvals',   'label' => 'Approvals',   'icon' => 'approvals',   'badge' => $counts['approvals'] ?? null, 'url' => route('flow-admin.approvals.index')],
         ['key' => 'outbox',      'label' => 'Outbox',      'icon' => 'outbox',      'badge' => $counts['outbox']    ?? null, 'url' => route('flow-admin.outbox.index')],

@@ -11,6 +11,7 @@ use Padosoft\LaravelFlowAdmin\Http\Controllers\OverviewController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\RunDetailController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\RunsController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\SettingsController;
+use Padosoft\LaravelFlowAdmin\Http\Controllers\StudioController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\ThemeController;
 
 Route::prefix(config('flow-admin.prefix', 'flow'))
@@ -18,6 +19,7 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
     ->name('flow-admin.')
     ->group(function () {
         Route::get('/', [OverviewController::class, 'index'])->name('overview');
+        Route::get('/studio', [StudioController::class, 'index'])->name('studio');
         Route::get('/runs', [RunsController::class, 'index'])->name('runs.index');
         Route::get('/runs/{id}', [RunDetailController::class, 'show'])->name('runs.show');
         Route::get('/approvals', [ApprovalsController::class, 'index'])->name('approvals.index');

@@ -19,6 +19,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $pageTitle }} · Flow Admin</title>
     <link rel="stylesheet" href="{{ route('flow-admin.assets.css') }}">
+    @stack('head')
 </head>
 <body data-testid="flow-admin-shell" data-theme="{{ $theme }}">
     <div class="app">
@@ -162,5 +163,6 @@
       toast('Flow Admin ready', 'Live refresh active', '');
     })();
     </script>
+    @stack('scripts')
 </body>
 </html>

@@ -16,6 +16,8 @@ use Padosoft\LaravelFlowAdmin\Authorizers\DenyAllAuthorizer;
 use Padosoft\LaravelFlowAdmin\Contracts\ActionAuthorizer;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\AdminCssController;
+use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\StudioCssController;
+use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\StudioJsController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\ThemeController;
 
 class FlowAdminServiceProvider extends ServiceProvider
@@ -160,5 +162,11 @@ class FlowAdminServiceProvider extends ServiceProvider
     {
         Route::get('/_flow-admin/assets/admin.css', AdminCssController::class)
             ->name('flow-admin.assets.css');
+
+        Route::get('/_flow-admin/assets/studio.js', StudioJsController::class)
+            ->name('flow-admin.assets.studio-js');
+
+        Route::get('/_flow-admin/assets/studio.css', StudioCssController::class)
+            ->name('flow-admin.assets.studio-css');
     }
 }

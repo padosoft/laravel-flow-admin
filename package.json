@@ -9,15 +9,23 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint resources/js tests/e2e scripts vite.config.js playwright.config.js eslint.config.js",
-    "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e": "npm run build && playwright test",
+    "test:e2e:headed": "npm run build && playwright test --headed"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",
     "@playwright/test": "^1.59.0",
+    "@vitejs/plugin-react": "^6.0.3",
     "alpinejs": "^3.14.3",
     "eslint": "^9.15.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^15.12.0",
     "vite": "^8.0.10"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.11.2",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   }
 }
