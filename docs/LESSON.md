@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-07-14 — E-PR0 (Dashboard read-model rewrite): path-repo CI, "no search = no cap", and a "@api-only" surface exception
+
+### `composer.json`'s local `path` repository needs its OWN sibling checkout step in CI — a single-repo `actions/checkout` silently breaks `composer install`
+
+Retargeting `padosoft/laravel-flow` from a tagged release to `dev-main` via a local `path` repository (`"url": "../padosoft-laravel-flow"`) works locally because the sibling directory already exists on disk, but a GitHub Actions runner starts with only THIS repo checked out — `composer update`/`install` fails to resolve the path repository outright, and every downstream job (Pint, PHPStan, PHPUnit) never runs. Local Copilot CLI review caught this before it ever reached CI (a genuinely CI-breaking finding a local-only test run cannot see). Fix: checkout BOTH repos as true siblings under `$GITHUB_WORKSPACE` (`path: laravel-flow-admin` + `path: padosoft-laravel-flow`), add `defaults.run.working-directory: laravel-flow-admin` to the job, and manually re-prefix the handful of GitHub Action inputs that are workspace-root-relative regardless of `working-directory` (`hashFiles(...)` in `if:` conditions, `actions/setup-node`'s `cache-dependency-path`, `actions/upload-artifact`'s `path`) — `working-directory` only affects `run:` shell steps, not YAML-level expressions or other actions' own path inputs. `laravel-flow-ai`/`laravel-flow-connect` already solved this identically; this is the third repo to need it.
+
+### "This filter can only express exact-match, so we cap at N most-recent rows" is a real regression if applied even when NO filtering needing that cap is actually active
+
+When a read-model rewrite drops to a bounded-batch-then-filter-in-PHP approach because the target contract's filter DTOs can't express free-text search or an OR-of-statuses, it's tempting to route EVERY call through that same bounded path for simplicity — but that silently caps `total`/pagination even for the plain "browse everything" or "filter by one exact status" case, which the target contract's real server-side pagination could serve unbounded. A PR-level Copilot review caught this precisely because it reasons about "what did the OLD implementation guarantee that the NEW one doesn't" — the old raw-SQL adapter counted/paginated the full table; the naive rewrite silently narrowed that to the cap for every read, not just the cases that structurally need it. Fix: branch on whether the ACTUAL request needs client-side filtering (free-text search present, or — for a multi-mapped status like this program's admin `'failed'` → engine `[failed, aborted]` — a compound status) and only fall back to the bounded batch in that branch; everything else goes straight to the target's own paginated call.
+
+### A documented "self-imposed narrower public-surface rule" (stricter than the dependency's own `@api` boundary) needs updating in the SAME PR that adds a deliberate, justified exception — not silently violated
+
+This repo's `AGENTS.md` says "consume only `Dashboard\*` and the documented action API" — narrower than core's actual `@api` surface (which also includes stable contracts like `Contracts\DefinitionRepository`). Adding a real, justified dependency on `DefinitionRepository` (needed because `Dashboard\*` has no declared-graph-node primitive, and the alternative was resurrecting a real pre-existing step-count bug) without updating that rule reads, to a reviewer checking the repo's own stated boundary, as an unexplained violation — even though the dependency itself is perfectly SemVer-safe. Fix: update the rule to name the specific exception and its rationale in the SAME commit, not as an afterthought — the reviewer's complaint was really "this isn't documented as intentional," not "this is technically unsafe."
+
 ## 2026-05-06 — Subtask 2.3 Playwright CI green-up
 
 ### Workflow-step `env:` does NOT propagate to PHP `env()` reliably under `vendor/bin/testbench serve` — use `testbench.yaml` `env:` block
