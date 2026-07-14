@@ -9,6 +9,7 @@ use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
 use Illuminate\Support\Facades\DB;
+use Padosoft\LaravelFlow\Contracts\DefinitionRepository;
 use Padosoft\LaravelFlow\Dashboard\FlowDashboardReadModel;
 use Padosoft\LaravelFlow\FlowRun;
 use Padosoft\LaravelFlowAdmin\Adapters\EloquentReadModel;
@@ -317,31 +318,38 @@ final class EloquentReadModelTest extends TestCase
 
     private function makeModel(): EloquentReadModel
     {
-        return new EloquentReadModel($this->app->make(FlowDashboardReadModel::class));
+        return new EloquentReadModel(
+            $this->app->make(FlowDashboardReadModel::class),
+            $this->app->make(DefinitionRepository::class),
+        );
     }
 
     private function migrateFlowTables(): void
     {
-        $this->runMigration($this->resolveMigrationPath('2026_05_02_000001_create_laravel_flow_tables.php'));
-        $this->runMigration($this->resolveMigrationPath('2026_05_04_000003_create_laravel_flow_approval_and_webhook_tables.php'));
-        $this->runMigration($this->resolveMigrationPath('2026_05_04_000004_add_previous_token_hash_to_flow_approvals.php'));
+        $directory = $this->resolveMigrationDirectory();
+        $files = glob($directory . DIRECTORY_SEPARATOR . '*.php') ?: [];
+        sort($files);
+
+        foreach ($files as $file) {
+            $this->runMigration($file);
+        }
     }
 
-    private function resolveMigrationPath(string $fileName): string
+    private function resolveMigrationDirectory(): string
     {
         $candidates = [
-            dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'vendor/padosoft/laravel-flow/database/migrations/' . $fileName,
-            base_path('vendor/padosoft/laravel-flow/database/migrations/' . $fileName),
-            dirname(base_path(), 1) . DIRECTORY_SEPARATOR . 'vendor/padosoft/laravel-flow/database/migrations/' . $fileName,
+            dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'vendor/padosoft/laravel-flow/database/migrations',
+            base_path('vendor/padosoft/laravel-flow/database/migrations'),
+            dirname(base_path(), 1) . DIRECTORY_SEPARATOR . 'vendor/padosoft/laravel-flow/database/migrations',
         ];
 
         foreach ($candidates as $candidate) {
-            if (file_exists($candidate)) {
+            if (is_dir($candidate)) {
                 return $candidate;
             }
         }
 
-        $this->fail('Migration file not found: ' . $fileName);
+        $this->fail('Migration directory not found for padosoft/laravel-flow');
 
         return '';
     }
@@ -400,15 +408,21 @@ final class EloquentReadModelTest extends TestCase
 
     private function seedStep(string $runId, array $attributes): void
     {
-        DB::table('flow_steps')->insert([
+        // `flow_steps` (v1) was superseded by `flow_run_nodes` (graph
+        // executor, Macro C): `step_name` -> `node_id`, `input`/`output` ->
+        // `inputs`/`outputs`, plus the required `node_type` column. The
+        // attribute key stays `step_name` here purely as the caller-facing
+        // parameter name; it maps onto the `node_id` column below.
+        DB::table('flow_run_nodes')->insert([
             'id' => $attributes['id'],
             'run_id' => $runId,
             'sequence' => $attributes['sequence'],
-            'step_name' => $attributes['step_name'],
+            'node_id' => $attributes['step_name'],
+            'node_type' => $attributes['node_type'] ?? 'legacy.step',
             'handler' => $attributes['handler'] ?? 'App\\Flow\\Handler',
             'status' => $attributes['status'] ?? 'running',
-            'input' => json_encode($attributes['input'] ?? []),
-            'output' => json_encode($attributes['output'] ?? null),
+            'inputs' => json_encode($attributes['input'] ?? []),
+            'outputs' => json_encode($attributes['output'] ?? null),
             'business_impact' => json_encode($attributes['business_impact'] ?? null),
             'error_class' => $attributes['error_class'] ?? null,
             'error_message' => $attributes['error_message'] ?? null,

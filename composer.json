@@ -18,12 +18,15 @@
         "illuminate/routing": "^13.0",
         "illuminate/support": "^13.0",
         "illuminate/view": "^13.0",
-        "padosoft/laravel-flow": "^1.0"
+        "padosoft/laravel-flow": "dev-main"
     },
     "repositories": [
         {
-            "type": "vcs",
-            "url": "https://github.com/padosoft/laravel-flow.git"
+            "type": "path",
+            "url": "../padosoft-laravel-flow",
+            "options": {
+                "symlink": false
+            }
         }
     ],
     "require-dev": {
