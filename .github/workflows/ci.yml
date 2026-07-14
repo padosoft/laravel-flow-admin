@@ -91,7 +91,7 @@ jobs:
 
       - name: Setup Node (with npm cache)
         if: steps.pkg.outputs.present == 'true' && steps.pkg.outputs.lockfile == 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
@@ -99,7 +99,7 @@ jobs:
 
       - name: Setup Node (no cache, no lockfile yet)
         if: steps.pkg.outputs.present == 'true' && steps.pkg.outputs.lockfile != 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
 
@@ -168,7 +168,7 @@ jobs:
 
       - name: Setup Node (with npm cache)
         if: steps.pkg.outputs.node == 'true' && steps.pkg.outputs.lockfile == 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
@@ -176,7 +176,7 @@ jobs:
 
       - name: Setup Node (no cache, no lockfile yet)
         if: steps.pkg.outputs.node == 'true' && steps.pkg.outputs.lockfile != 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
 
