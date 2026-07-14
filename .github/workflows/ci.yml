@@ -258,7 +258,11 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           name: flow-admin-built-assets
-          path: public/vendor/flow-admin/
+          # `download-artifact` is a `uses:` step — `defaults.run.working-directory`
+          # only applies to `run:` (shell) steps, so this must be prefixed
+          # with the checkout subdirectory explicitly (same reason the
+          # Playwright-report upload below is `laravel-flow-admin/playwright-report/`).
+          path: laravel-flow-admin/public/vendor/flow-admin/
 
       - name: Build assets (fallback — artifact download failed or was skipped)
         if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true' && steps.download-assets.outcome != 'success'
