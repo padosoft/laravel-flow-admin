@@ -21,6 +21,9 @@ use Padosoft\LaravelFlow\Dashboard\RunSummary as DashboardRunSummary;
 use Padosoft\LaravelFlow\Dashboard\StepSummary;
 use Padosoft\LaravelFlow\Dashboard\WebhookOutboxFilter;
 use Padosoft\LaravelFlow\Dashboard\WebhookOutboxSummary as DashboardWebhookOutboxSummary;
+use Padosoft\LaravelFlow\Graph\StoredDefinition;
+use Padosoft\LaravelFlow\Node\NodeDefinition;
+use Padosoft\LaravelFlow\Node\NodeRegistry;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ApprovalSummary;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\AuditEvent;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\FlowDefinition;
@@ -32,12 +35,14 @@ use Padosoft\LaravelFlowAdmin\Contracts\Dto\Step;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ThroughputBucket;
 use Padosoft\LaravelFlowAdmin\Contracts\PaginatedResult;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
+use Padosoft\LaravelFlowAdmin\Support\GraphRedactor;
 use Throwable;
 
 /**
  * Routes every read exclusively through core's `@api` `FlowDashboardReadModel`
- * (+ `Contracts\DefinitionRepository` for declared-step counts — the one
- * named exception to "Dashboard\* only", see `AGENTS.md`) — never raw
+ * (+ `Contracts\DefinitionRepository` for declared-step counts and published
+ * graphs, `Node\NodeRegistry` for the Studio canvas's node catalog — the
+ * named exceptions to "Dashboard\* only", see `AGENTS.md`) — never raw
  * query-builder calls against the `flow_*` tables.
  *
  * `FlowDashboardReadModel`'s filter DTOs match on EXACT equality only (no
@@ -94,6 +99,7 @@ final readonly class EloquentReadModel implements ReadModel
     public function __construct(
         private FlowDashboardReadModel $reader,
         private DefinitionRepository $definitions,
+        private NodeRegistry $nodeRegistry,
     ) {}
 
     public function listRuns(?string $status = null, ?string $flow = null, ?string $query = null, int $page = 1, int $perPage = 25): PaginatedResult
@@ -382,6 +388,80 @@ final readonly class EloquentReadModel implements ReadModel
         }
 
         return $definitions;
+    }
+
+    public function graph(string $name): ?array
+    {
+        try {
+            $stored = $this->definitions->latest($name, StoredDefinition::STATUS_PUBLISHED);
+        } catch (Throwable $e) {
+            // Fail closed (the controller reports a routine 404, same as
+            // "not published") — but unlike declaredStepCount()'s "degrade
+            // a metric to 0" case, a failure here can mean the stored
+            // definition's signature verification failed (tampering, or a
+            // broken signing-secret rotation), which an operator needs to
+            // be able to notice. Log the message only — never the
+            // exception's full context, which could carry the stored
+            // graph's contents.
+            Log::warning('laravel-flow-admin: failed to resolve the published graph for a flow definition', [
+                'name' => $name,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if ($stored === null) {
+            return null;
+        }
+
+        $nodes = $stored->graph['nodes'] ?? null;
+        $usedTypes = is_array($nodes)
+            ? array_unique(array_values(array_filter(array_map(
+                static fn (mixed $node): ?string => is_array($node) && is_string($node['type'] ?? null) ? $node['type'] : null,
+                $nodes,
+            ))))
+            : [];
+
+        // Deliberately outside the try/catch above: NodeRegistry::has()/
+        // get() are in-memory array lookups over types registered at boot
+        // time, not I/O — they don't throw, so there's nothing here for
+        // the fail-closed-to-404 handling to catch.
+        $catalog = [];
+        foreach ($usedTypes as $type) {
+            if (! $this->nodeRegistry->has($type)) {
+                continue;
+            }
+
+            $catalog[$type] = $this->nodeDefinitionToArray($this->nodeRegistry->get($type));
+        }
+
+        return [
+            'graph' => GraphRedactor::stripNodeConfig($stored->graph),
+            'catalog' => $catalog,
+        ];
+    }
+
+    /**
+     * @return array{type: string, name: string, category: string, icon: ?string, description: ?string, inputs: list<array{key: string, type: string, required: bool, label: string, multiple: bool}>, outputs: list<array{key: string, type: string, required: bool, label: string, multiple: bool}>}
+     */
+    private function nodeDefinitionToArray(NodeDefinition $definition): array
+    {
+        // NodeDefinition::toArray() is a superset (also carries retry/cacheable/cost,
+        // server-side execution metadata the canvas doesn't need) — keep the
+        // Studio catalog response to exactly the rendering-relevant subset.
+        $full = $definition->toArray();
+
+        return [
+            'type' => $full['type'],
+            'name' => $full['name'],
+            'category' => $full['category'],
+            'icon' => $full['icon'],
+            'description' => $full['description'],
+            'inputs' => $full['inputs'],
+            'outputs' => $full['outputs'],
+        ];
     }
 
     /**

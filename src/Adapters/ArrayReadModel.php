@@ -18,6 +18,7 @@ use Padosoft\LaravelFlowAdmin\Contracts\Dto\Step;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ThroughputBucket;
 use Padosoft\LaravelFlowAdmin\Contracts\PaginatedResult;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
+use Padosoft\LaravelFlowAdmin\Support\GraphRedactor;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
@@ -373,6 +374,111 @@ final class ArrayReadModel implements ReadModel
         }
 
         return array_values($definitions);
+    }
+
+    /**
+     * Deterministic fixture graph (seed 42, matches the rest of this
+     * adapter) for `order_checkout_flow` — the same id `FLOW_DEFS` already
+     * uses. Exercises 3 distinct `PortType`s (json/bool/text) across its
+     * 3 wires so Playwright/screenshots can assert wire-color-per-type
+     * without a real published definition or `NodeRegistry`.
+     *
+     * Matched by EITHER `FLOW_DEFS`' internal `id` ("order_checkout_flow")
+     * OR its human-readable `name` ("OrderCheckoutFlow") — `definitions()`
+     * (unchanged, pre-existing behaviour) exposes the pretty `name` as
+     * `FlowDefinition::$name`, the same value the Studio index page links
+     * with, so this must accept it too, not just the internal id.
+     */
+    public function graph(string $name): ?array
+    {
+        if (! $this->matchesFixtureFlow($name, 'order_checkout_flow')) {
+            return null;
+        }
+
+        return [
+            'graph' => GraphRedactor::stripNodeConfig([
+                'schema_version' => 1,
+                'kind' => 'laravel-flow',
+                'metadata' => [],
+                'nodes' => [
+                    ['id' => 'start', 'type' => 'demo.trigger', 'config' => [], 'position' => ['x' => 0, 'y' => 0]],
+                    ['id' => 'validate', 'type' => 'demo.validate', 'config' => [], 'position' => ['x' => 260, 'y' => 0]],
+                    // Non-empty config here, on purpose: it is the fixture that
+                    // proves GraphRedactor::stripNodeConfig() actually strips a
+                    // secret-shaped key before this envelope reaches the browser.
+                    ['id' => 'charge', 'type' => 'demo.charge', 'config' => ['api_key' => 'sk_test_fixture_do_not_leak'], 'position' => ['x' => 520, 'y' => 0]],
+                    ['id' => 'notify', 'type' => 'demo.notify', 'config' => [], 'position' => ['x' => 780, 'y' => 0]],
+                ],
+                'connections' => [
+                    ['sourceNodeId' => 'start', 'sourcePortKey' => 'out', 'targetNodeId' => 'validate', 'targetPortKey' => 'in'],
+                    ['sourceNodeId' => 'validate', 'sourcePortKey' => 'valid', 'targetNodeId' => 'charge', 'targetPortKey' => 'authorized'],
+                    ['sourceNodeId' => 'charge', 'sourcePortKey' => 'receipt', 'targetNodeId' => 'notify', 'targetPortKey' => 'message'],
+                ],
+            ]),
+            'catalog' => [
+                'demo.trigger' => [
+                    'type' => 'demo.trigger',
+                    'name' => 'Order Received',
+                    'category' => 'trigger',
+                    'icon' => 'play',
+                    'description' => 'Starts the checkout flow.',
+                    'inputs' => [],
+                    'outputs' => [
+                        ['key' => 'out', 'type' => 'json', 'required' => false, 'label' => 'Order payload', 'multiple' => false],
+                    ],
+                ],
+                'demo.validate' => [
+                    'type' => 'demo.validate',
+                    'name' => 'Validate Order',
+                    'category' => 'logic',
+                    'icon' => 'check',
+                    'description' => 'Validates the order payload.',
+                    'inputs' => [
+                        ['key' => 'in', 'type' => 'json', 'required' => true, 'label' => 'Order payload', 'multiple' => false],
+                    ],
+                    'outputs' => [
+                        ['key' => 'valid', 'type' => 'bool', 'required' => false, 'label' => 'Is valid', 'multiple' => false],
+                    ],
+                ],
+                'demo.charge' => [
+                    'type' => 'demo.charge',
+                    'name' => 'Charge Payment',
+                    'category' => 'payment',
+                    'icon' => 'send',
+                    'description' => 'Charges the customer.',
+                    'inputs' => [
+                        ['key' => 'authorized', 'type' => 'bool', 'required' => true, 'label' => 'Authorized', 'multiple' => false],
+                    ],
+                    'outputs' => [
+                        ['key' => 'receipt', 'type' => 'text', 'required' => false, 'label' => 'Receipt id', 'multiple' => false],
+                    ],
+                ],
+                'demo.notify' => [
+                    'type' => 'demo.notify',
+                    'name' => 'Notify Customer',
+                    'category' => 'notification',
+                    'icon' => 'bell',
+                    'description' => 'Sends a confirmation.',
+                    'inputs' => [
+                        ['key' => 'message', 'type' => 'text', 'required' => true, 'label' => 'Message', 'multiple' => false],
+                    ],
+                    'outputs' => [],
+                ],
+            ],
+        ];
+    }
+
+    private function matchesFixtureFlow(string $name, string $id): bool
+    {
+        foreach ((array) ($this->fixture['FLOW_DEFS'] ?? []) as $definition) {
+            if (! is_array($definition) || ($definition['id'] ?? null) !== $id) {
+                continue;
+            }
+
+            return $name === $id || $name === (string) ($definition['name'] ?? $id);
+        }
+
+        return $name === $id;
     }
 
     /**

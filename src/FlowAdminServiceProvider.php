@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Padosoft\LaravelFlow\Contracts\DefinitionRepository;
 use Padosoft\LaravelFlow\Dashboard\FlowDashboardReadModel;
+use Padosoft\LaravelFlow\Node\NodeRegistry;
 use Padosoft\LaravelFlowAdmin\Adapters\ArrayReadModel;
 use Padosoft\LaravelFlowAdmin\Adapters\EloquentReadModel;
 use Padosoft\LaravelFlowAdmin\Authorizers\DenyAllAuthorizer;
@@ -37,6 +38,7 @@ class FlowAdminServiceProvider extends ServiceProvider
             return new EloquentReadModel(
                 $app->make(FlowDashboardReadModel::class),
                 $app->make(DefinitionRepository::class),
+                $app->make(NodeRegistry::class),
             );
         });
 

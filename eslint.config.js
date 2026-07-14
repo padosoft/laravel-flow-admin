@@ -42,6 +42,10 @@ export default [
       ...react.configs.flat.recommended.rules,
       ...react.configs.flat['jsx-runtime'].rules,
       ...reactHooks.configs['recommended-latest'].rules,
+      // No `prop-types` package in this project (no TypeScript either) —
+      // runtime prop validation isn't part of this codebase's tooling, so
+      // this rule would only ever fire false positives.
+      'react/prop-types': 'off',
     },
     settings: {
       react: { version: 'detect' },
