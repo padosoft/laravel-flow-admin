@@ -213,7 +213,7 @@ final readonly class EloquentReadModel implements ReadModel
         $windowStart = $windowNow->sub(new DateInterval('P1D'));
         $prevWindowStart = $windowStart->sub(new DateInterval('P1D'));
 
-        $window = $this->runsInWindow($prevWindowStart === $windowStart ? $windowStart : $windowStart, $windowNow);
+        $window = $this->runsInWindow($windowStart, $windowNow);
         $previous = $this->runsInWindow($prevWindowStart, $windowStart);
 
         $windowRates = $this->windowRates($window);

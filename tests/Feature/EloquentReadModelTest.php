@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\DB;
 use Padosoft\LaravelFlow\Contracts\DefinitionRepository;
 use Padosoft\LaravelFlow\Dashboard\FlowDashboardReadModel;
 use Padosoft\LaravelFlow\FlowRun;
+use Padosoft\LaravelFlow\Graph\GraphDefinition;
+use Padosoft\LaravelFlow\Graph\GraphNode;
 use Padosoft\LaravelFlowAdmin\Adapters\EloquentReadModel;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\KpiSummary;
 use Padosoft\LaravelFlowAdmin\Tests\TestCase;
@@ -314,6 +316,83 @@ final class EloquentReadModelTest extends TestCase
         $this->assertSame(433, $kpis->avgDurationMs);
         $this->assertSame(700, $kpis->p95DurationMs);
         $this->assertInstanceOf(KpiSummary::class, $kpis);
+    }
+
+    public function test_find_run_returns_null_for_unknown_run_id(): void
+    {
+        $this->assertNull($this->makeModel()->findRun('does-not-exist'));
+    }
+
+    public function test_definitions_reports_declared_step_count_from_definition_repository(): void
+    {
+        // declaredStepCount() must come from the definition's stored graph
+        // (3 nodes below), not from a count of step-execution rows — the
+        // bug the rewrite fixes. Seed only 2 step rows to prove the two
+        // numbers are read from different sources and don't coincide.
+        $this->seedRun([
+            'id' => 'run-def-checkout',
+            'status' => FlowRun::STATUS_SUCCEEDED,
+            'definition_name' => 'checkout:1',
+        ]);
+        $this->seedStep('run-def-checkout', [
+            'id' => 21,
+            'sequence' => 1,
+            'step_name' => 'validate',
+            'status' => 'succeeded',
+            'started_at' => $this->tsMinutesAgo(5),
+        ]);
+        $this->seedStep('run-def-checkout', [
+            'id' => 22,
+            'sequence' => 2,
+            'step_name' => 'charge',
+            'status' => 'succeeded',
+            'started_at' => $this->tsMinutesAgo(4),
+        ]);
+
+        $this->app->make(DefinitionRepository::class)->createDraft('checkout', new GraphDefinition([
+            new GraphNode('validate', 'test.step'),
+            new GraphNode('charge', 'test.step'),
+            new GraphNode('notify', 'test.step'),
+        ], []));
+
+        $definitions = $this->makeModel()->definitions();
+
+        $checkout = null;
+        foreach ($definitions as $definition) {
+            if ($definition->name === 'checkout') {
+                $checkout = $definition;
+            }
+        }
+
+        $this->assertNotNull($checkout);
+        $this->assertSame(3, $checkout->stepCount);
+    }
+
+    public function test_recent_batch_cap_bounds_list_runs_to_most_recent_window(): void
+    {
+        // Mirrors EloquentReadModel::RECENT_BATCH_CAP. Seed one more run
+        // than the cap, each one minute further in the past, so the very
+        // last one seeded is the single oldest run and falls outside the
+        // bounded "recent" window read by listRuns()/search.
+        $cap = 200;
+        $now = new DateTimeImmutable('now', new DateTimeZone(self::UTC));
+
+        for ($i = 0; $i < $cap + 1; $i++) {
+            $this->seedRun([
+                'id' => sprintf('run-cap-%04d', $i),
+                'status' => FlowRun::STATUS_SUCCEEDED,
+                'correlation_id' => $i === $cap ? 'outside-window-marker' : 'tenant-cap-' . $i,
+                'started_at' => $now->sub(new DateInterval(sprintf('PT%dM', $i))),
+            ]);
+        }
+
+        $model = $this->makeModel();
+
+        $all = $model->listRuns(null, null, null, 1, $cap);
+        $this->assertSame($cap, $all->total);
+
+        $outsideWindow = $model->listRuns(null, null, 'outside-window-marker');
+        $this->assertSame(0, $outsideWindow->total);
     }
 
     private function makeModel(): EloquentReadModel

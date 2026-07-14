@@ -9,7 +9,7 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![PHP Version](https://img.shields.io/packagist/php-v/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![Laravel](https://img.shields.io/badge/Laravel-%5E13.0-ff2d20?style=flat-square&logo=laravel)](https://laravel.com)
-[![Tests](https://img.shields.io/badge/tests-101%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
+[![Tests](https://img.shields.io/badge/tests-104%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![E2E](https://img.shields.io/badge/playwright-chromium%20%7C%20firefox%20%7C%20webkit-45ba4b?style=flat-square&logo=playwright)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%208-brightgreen?style=flat-square)](https://phpstan.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-pint-7e22ce?style=flat-square)](https://laravel.com/docs/pint)
@@ -80,7 +80,7 @@
 - 🛡️ **Deny-by-default authorizer** — every mutation goes through your `ActionAuthorizer`. No accidents.
 - 🔁 **Auto-refreshing pages** — configurable polling (`/flow/api/live`).
 - 🧱 **Adapter pattern** — `eloquent` for prod, `array` for demos / E2E (deterministic seed-42 fixtures).
-- 🧪 **Battle-tested** — 101 PHPUnit tests, 7 Playwright scenarios (21 runs across Chromium / Firefox / WebKit).
+- 🧪 **Battle-tested** — 104 PHPUnit tests, 7 Playwright scenarios (21 runs across Chromium / Firefox / WebKit).
 - 📦 **Zero-coupling** — built on a public `Contracts\*` surface; engine internals stay `@internal`.
 
 ---
@@ -374,6 +374,8 @@ HTTP request
 
 Design source-of-truth for the existing runs/approvals/outbox panel lives under `.design-source/project/` (pixel reference) and is enforced through Playwright visual regression on chromium / firefox / webkit. The Flow Studio UI (graph canvas, editor, live run monitor — Macro E, in progress) is being built against a separate template under `design/claude-design-template/`.
 
+> ℹ️ **Search & list scope**: the `eloquent` adapter reads through core's `Dashboard\FlowDashboardReadModel`, which only exposes single-field, exact-match filters (no free-text search, no distinct-name listing). Runs search, flow filtering, the definitions list, and KPIs are therefore computed over the **200 most recent runs** rather than full history — the same bound `Dashboard\Pagination::MAX_PER_PAGE` already imposes on a single page. Installs with more than 200 runs since the oldest match won't surface it in search; use direct DB access or a future `flow:*` Artisan command for full-history lookups.
+
 ---
 
 ## 🤖 AI Vibe Coding Pack
@@ -419,13 +421,13 @@ Every push runs through this gate (matrix `php: 8.3, 8.4` × `laravel: 13`):
 composer validate --strict --no-check-publish
 composer format:test          # Laravel Pint
 composer analyse              # PHPStan / Larastan level 8
-composer test                 # PHPUnit — 101 tests, 584 assertions
+composer test                 # PHPUnit — 104 tests, 589 assertions
 npm run lint                  # ESLint flat config
 npm run build                 # Vite build verification
 npm run test:e2e              # Playwright on chromium + firefox + webkit
 ```
 
-Latest local run: **101 tests / 584 assertions / 21 E2E runs passed** (7 Playwright scenarios × 3 browsers).
+Latest local run: **104 tests / 589 assertions / 21 E2E runs passed** (7 Playwright scenarios × 3 browsers).
 
 ---
 
