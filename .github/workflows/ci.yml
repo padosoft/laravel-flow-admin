@@ -232,12 +232,20 @@ jobs:
         if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
+      # `npm run build` here (once per matrix job) instead of via
+      # `npm run test:e2e`'s own build-first step (used for local dev
+      # convenience) — this job runs once PER BROWSER, so going through
+      # the npm script would rebuild identically 3x per CI run.
+      - name: Build assets
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
+        run: npm run build
+
       - name: Run Playwright (${{ matrix.browser }})
         if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         env:
           FLOW_ADMIN_MIDDLEWARE: web
           FLOW_ADMIN_ADAPTER: array
-        run: npm run test:e2e -- --project=${{ matrix.browser }}
+        run: npx playwright test --project=${{ matrix.browser }}
 
       - name: Upload Playwright report
         if: failure() && steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
