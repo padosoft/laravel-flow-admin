@@ -13,6 +13,12 @@ namespace Padosoft\LaravelFlowAdmin\Support;
  * `id`/`type`/`position` to render nodes, so the safest contract is to
  * never forward `config` to the browser until a later subtask defines an
  * explicit "safe to display/edit" schema for it.
+ *
+ * Scope: only per-node `config` is stripped. The envelope's top-level
+ * `metadata` passes through untouched — nothing in core or this package's
+ * fixtures stashes secrets there today, but a future subtask that starts
+ * writing free-form data into graph-level `metadata` must extend this
+ * redaction (or add a dedicated one) before it reaches the client.
  */
 final class GraphRedactor
 {

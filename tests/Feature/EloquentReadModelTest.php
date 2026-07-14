@@ -524,6 +524,23 @@ final class EloquentReadModelTest extends TestCase
         $this->assertNull($this->makeModel()->graph('does-not-exist'));
     }
 
+    public function test_graph_returns_null_when_the_latest_version_is_still_a_draft(): void
+    {
+        $registry = $this->app->make(NodeRegistry::class);
+        if (! $registry->has('test.studio.demo-trigger')) {
+            $registry->register(DemoTriggerNode::class);
+        }
+
+        $graphDefinition = new GraphDefinition([
+            new GraphNode('start', 'test.studio.demo-trigger', [], ['x' => 0, 'y' => 0]),
+        ], []);
+
+        $repository = $this->app->make(DefinitionRepository::class);
+        $repository->createDraft('studio-draft-only-flow', $graphDefinition);
+
+        $this->assertNull($this->makeModel()->graph('studio-draft-only-flow'));
+    }
+
     public function test_graph_returns_null_when_definition_repository_throws(): void
     {
         $throwingDefinitions = new class implements DefinitionRepository

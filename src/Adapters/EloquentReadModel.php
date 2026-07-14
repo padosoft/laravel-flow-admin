@@ -424,6 +424,10 @@ final readonly class EloquentReadModel implements ReadModel
             ))))
             : [];
 
+        // Deliberately outside the try/catch above: NodeRegistry::has()/
+        // get() are in-memory array lookups over types registered at boot
+        // time, not I/O — they don't throw, so there's nothing here for
+        // the fail-closed-to-404 handling to catch.
         $catalog = [];
         foreach ($usedTypes as $type) {
             if (! $this->nodeRegistry->has($type)) {
