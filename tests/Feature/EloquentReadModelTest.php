@@ -139,12 +139,14 @@ final class EloquentReadModelTest extends TestCase
             ]);
         }
 
+        DB::connection()->flushQueryLog();
         DB::connection()->enableQueryLog();
 
         $result = $this->makeModel()->listRuns(null, null, null, 1, 25);
 
         $queries = DB::connection()->getQueryLog();
         DB::connection()->flushQueryLog();
+        DB::connection()->disableQueryLog();
 
         $this->assertCount(5, $result->items);
         foreach ($result->items as $item) {
@@ -485,12 +487,15 @@ final class EloquentReadModelTest extends TestCase
         $this->assertSame(0, $flaky->stepCount);
     }
 
-    public function test_recent_batch_cap_bounds_list_runs_to_most_recent_window(): void
+    public function test_recent_batch_cap_bounds_search_but_not_plain_listing(): void
     {
         // Mirrors EloquentReadModel::RECENT_BATCH_CAP. Seed one more run
         // than the cap, each one minute further in the past, so the very
         // last one seeded is the single oldest run and falls outside the
-        // bounded "recent" window read by listRuns()/search.
+        // bounded "recent" window a free-text SEARCH reads. Plain listing
+        // (no status/flow/search) delegates straight to RunFilter-backed
+        // server-side pagination and is NOT bounded — its total must
+        // reflect the real row count.
         $cap = 200;
         $now = new DateTimeImmutable('now', new DateTimeZone(self::UTC));
 
@@ -506,10 +511,54 @@ final class EloquentReadModelTest extends TestCase
         $model = $this->makeModel();
 
         $all = $model->listRuns(null, null, null, 1, $cap);
-        $this->assertSame($cap, $all->total);
+        $this->assertSame($cap + 1, $all->total);
 
         $outsideWindow = $model->listRuns(null, null, 'outside-window-marker');
         $this->assertSame(0, $outsideWindow->total);
+    }
+
+    public function test_list_approvals_are_not_bounded_by_recent_batch_cap_without_search(): void
+    {
+        // Regression: listApprovals() previously always fetched a
+        // RECENT_BATCH_CAP-bounded batch and computed total from that
+        // slice, even with no search — the approvals page and its badge
+        // undercounted and later pages were unreachable past 200. Absent
+        // search, this must now delegate to real server-side pagination.
+        $runId = $this->seedRun(['id' => 'run-approvals-cap']);
+        $cap = 200;
+
+        for ($i = 0; $i < $cap + 5; $i++) {
+            $this->seedApproval([
+                'id' => sprintf('approval-cap-%04d', $i),
+                'run_id' => $runId,
+                'step_name' => 'step-' . $i,
+                'status' => 'pending',
+            ]);
+        }
+
+        $result = $this->makeModel()->listApprovals(null, null, 1, $cap);
+
+        $this->assertSame($cap + 5, $result->total);
+    }
+
+    public function test_list_webhook_outbox_are_not_bounded_by_recent_batch_cap_without_search(): void
+    {
+        // Same regression as approvals, for the outbox list.
+        $runId = $this->seedRun(['id' => 'run-outbox-cap']);
+        $cap = 200;
+
+        for ($i = 0; $i < $cap + 5; $i++) {
+            $this->seedOutbox([
+                'id' => 5000 + $i,
+                'run_id' => $runId,
+                'event' => 'flow.completed',
+                'status' => 'pending',
+            ]);
+        }
+
+        $result = $this->makeModel()->listWebhookOutbox(null, null, 1, $cap);
+
+        $this->assertSame($cap + 5, $result->total);
     }
 
     public function test_kpis_are_not_truncated_by_the_recent_batch_cap_within_the_24h_window(): void

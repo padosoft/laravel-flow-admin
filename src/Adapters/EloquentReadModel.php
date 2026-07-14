@@ -6,7 +6,9 @@ namespace Padosoft\LaravelFlowAdmin\Adapters;
 
 use DateInterval;
 use DateTimeImmutable;
+use DateTimeInterface;
 use DateTimeZone;
+use Illuminate\Support\Facades\Log;
 use Padosoft\LaravelFlow\Contracts\DefinitionRepository;
 use Padosoft\LaravelFlow\Dashboard\ApprovalFilter;
 use Padosoft\LaravelFlow\Dashboard\ApprovalSummary as DashboardApprovalSummary;
@@ -34,23 +36,28 @@ use Throwable;
 
 /**
  * Routes every read exclusively through core's `@api` `FlowDashboardReadModel`
- * (+ `DefinitionRepository` for declared-step counts) — never raw query-builder
- * calls against the `flow_*` tables. `FlowDashboardReadModel`'s filter DTOs match
- * on EXACT equality only (no free-text substring search, no OR-of-statuses,
- * no distinct-name listing), so several admin features that the old
- * raw-SQL adapter implemented at the database level are now implemented by
- * fetching a BOUNDED, most-recent batch (`self::RECENT_BATCH_CAP` runs —
- * the same ceiling `Dashboard\Pagination::MAX_PER_PAGE` already imposes on
- * core's own contract) and filtering/aggregating in PHP. This is a real,
- * deliberate scope boundary, not silently pretended away: search, flow
- * filtering, and the definitions list only see the most recent
- * `RECENT_BATCH_CAP` runs, not full history. Every other satellite package
- * in this program accepts the identical bound for identical reasons (see
- * `laravel-flow-ai`'s `FlowAdvisor::candidateDefinitionNames()`). KPIs and
- * throughput buckets do NOT share this bound — {@see self::runsInWindow()}
- * pages through every run in the requested window instead of stopping at
- * `RECENT_BATCH_CAP`, since those are numeric aggregates rather than a
- * "recent list" UX affordance.
+ * (+ `Contracts\DefinitionRepository` for declared-step counts — the one
+ * named exception to "Dashboard\* only", see `AGENTS.md`) — never raw
+ * query-builder calls against the `flow_*` tables.
+ *
+ * `FlowDashboardReadModel`'s filter DTOs match on EXACT equality only (no
+ * free-text substring search, no OR-of-statuses, no distinct-name listing,
+ * no flow-name PREFIX match). Plain listing and single-exact-status
+ * filtering (`listRuns`/`listApprovals`/`listWebhookOutbox` with no free-text
+ * `query` — and for `listRuns` specifically, no compound admin status like
+ * `'failed'` and no flow-prefix filter) delegate straight to
+ * `FlowDashboardReadModel`'s own server-side pagination — NOT bounded, full
+ * history. Only a free-text search (or, for runs, a compound status /
+ * flow-prefix filter) falls back to fetching a BOUNDED, most-recent batch
+ * (`self::RECENT_BATCH_CAP` runs — the same ceiling `Dashboard\Pagination::MAX_PER_PAGE`
+ * already imposes on core's own contract) and filtering/aggregating in PHP,
+ * since core's filter DTOs cannot express those queries server-side. This is
+ * a real, deliberate scope boundary, not silently pretended away — see
+ * `laravel-flow-ai`'s `FlowAdvisor::candidateDefinitionNames()` for the
+ * identical tradeoff in a sibling package. KPIs and throughput buckets do
+ * NOT share this bound at all — {@see self::runsInWindow()} pages through
+ * every run in the requested window (up to `WINDOW_PAGE_SAFETY_CAP`, logged
+ * if ever hit) instead of stopping at `RECENT_BATCH_CAP`.
  */
 final readonly class EloquentReadModel implements ReadModel
 {
@@ -74,11 +81,15 @@ final readonly class EloquentReadModel implements ReadModel
      * Defensive ceiling on how many `RECENT_BATCH_CAP`-sized pages
      * `runsInWindow()` will fetch while paging through a KPI/throughput
      * window. Unlike `RECENT_BATCH_CAP` (an intentional "recent list" UX
-     * bound), KPI aggregates must reflect the full window population —
-     * this only guards against a pathologically busy window running away.
-     * 20 * RECENT_BATCH_CAP = 4,000 runs per window.
+     * bound), KPI aggregates must reflect the full window population — this
+     * only guards against an unbounded loop on a pathologically busy
+     * window. 50 * RECENT_BATCH_CAP = 10,000 runs per window — well beyond
+     * any real 24h/48h rolling window this program's installs run at
+     * today. If it's ever actually hit, `runsInWindow()` logs a warning
+     * (not silent) and degrades to the partial set rather than looping
+     * forever or throwing.
      */
-    private const WINDOW_PAGE_SAFETY_CAP = 20;
+    private const WINDOW_PAGE_SAFETY_CAP = 50;
 
     public function __construct(
         private FlowDashboardReadModel $reader,
@@ -92,6 +103,27 @@ final readonly class EloquentReadModel implements ReadModel
         $engineStatuses = $this->toEngineStatuses($status);
         $flowFilter = trim((string) $flow);
         $search = trim((string) $query);
+
+        // A single exact engine status (or none) can be pushed straight
+        // into RunFilter for TRUE server-side pagination — no RECENT_BATCH_CAP
+        // involved, so this covers the common "browse everything" /
+        // "filter by one status" cases at full scale. Only a compound
+        // status (admin 'failed' maps to two engine statuses — no OR
+        // support in RunFilter), a flow prefix filter, or free-text search
+        // fall back to the bounded batch-and-filter-in-PHP path, since none
+        // of those can be expressed as a single RunFilter.
+        if (! is_array($engineStatuses) && $flowFilter === '' && $search === '') {
+            $paged = $this->reader->listRuns(new RunFilter(status: $engineStatuses), new Pagination($page, $perPage));
+
+            $stepCounts = $this->reader->stepCounts(array_map(static fn (DashboardRunSummary $run): string => $run->id, $paged->items));
+
+            return new PaginatedResult(
+                items: array_map(fn (DashboardRunSummary $run): RunSummary => $this->mapRunSummary($run, $stepCounts[$run->id] ?? 0), $paged->items),
+                total: $paged->total,
+                page: $paged->page,
+                perPage: $paged->perPage,
+            );
+        }
 
         $filtered = array_values(array_filter(
             $this->recentRuns(),
@@ -159,13 +191,25 @@ final readonly class EloquentReadModel implements ReadModel
         $perPage = $this->normalizePerPage($perPage);
         $engineStatus = $this->toApprovalStatus($status);
         $search = trim((string) $query);
-
         $filter = new ApprovalFilter(status: $engineStatus);
-        $candidates = $this->reader->listApprovals($filter, new Pagination(1, self::RECENT_BATCH_CAP))->items;
 
-        $filtered = $search === ''
-            ? $candidates
-            : array_values(array_filter($candidates, fn (DashboardApprovalSummary $a): bool => $this->approvalMatchesSearch($a, $search)));
+        // ApprovalFilter's status is always a single exact match (no
+        // OR-of-statuses like listRuns()'s admin 'failed'), so absent a
+        // free-text search this can ALWAYS be true server-side pagination
+        // — no RECENT_BATCH_CAP involved.
+        if ($search === '') {
+            $paged = $this->reader->listApprovals($filter, new Pagination($page, $perPage));
+
+            return new PaginatedResult(
+                items: array_map($this->mapApproval(...), $paged->items),
+                total: $paged->total,
+                page: $paged->page,
+                perPage: $paged->perPage,
+            );
+        }
+
+        $candidates = $this->reader->listApprovals($filter, new Pagination(1, self::RECENT_BATCH_CAP))->items;
+        $filtered = array_values(array_filter($candidates, fn (DashboardApprovalSummary $a): bool => $this->approvalMatchesSearch($a, $search)));
 
         $total = count($filtered);
         $pageItems = array_slice($filtered, $this->offset($page, $perPage), $perPage);
@@ -191,16 +235,27 @@ final readonly class EloquentReadModel implements ReadModel
         $perPage = $this->normalizePerPage($perPage);
         $engineStatus = $this->toWebhookStatus($status);
         $search = trim((string) $query);
-
         $filter = new WebhookOutboxFilter(status: $engineStatus);
-        $candidates = $this->reader->listWebhookOutbox($filter, new Pagination(1, self::RECENT_BATCH_CAP))->items;
 
-        $filtered = $search === ''
-            ? $candidates
-            : array_values(array_filter($candidates, fn (DashboardWebhookOutboxSummary $o): bool => $this->outboxMatchesSearch($o, $search)));
+        // WebhookOutboxFilter's status is always a single exact match, so
+        // absent a free-text search this can ALWAYS be true server-side
+        // pagination — no RECENT_BATCH_CAP involved.
+        if ($search === '') {
+            $paged = $this->reader->listWebhookOutbox($filter, new Pagination($page, $perPage));
+
+            return new PaginatedResult(
+                items: array_map($this->mapOutbox(...), $paged->items),
+                total: $paged->total,
+                page: $paged->page,
+                perPage: $paged->perPage,
+            );
+        }
 
         // `FlowDashboardReadModel::listWebhookOutbox()` already orders by
         // `orderByDesc('id')` (newest first) — no re-reversal needed here.
+        $candidates = $this->reader->listWebhookOutbox($filter, new Pagination(1, self::RECENT_BATCH_CAP))->items;
+        $filtered = array_values(array_filter($candidates, fn (DashboardWebhookOutboxSummary $o): bool => $this->outboxMatchesSearch($o, $search)));
+
         $total = count($filtered);
         $pageItems = array_slice($filtered, $this->offset($page, $perPage), $perPage);
 
@@ -259,8 +314,9 @@ final readonly class EloquentReadModel implements ReadModel
 
     public function throughputBuckets(): array
     {
-        $since = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->sub(new DateInterval('PT' . self::THROUGHPUT_WINDOW_HOURS . 'H'));
-        $runs = $this->runsInWindow($since, new DateTimeImmutable('now', new DateTimeZone('UTC')));
+        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $since = $now->sub(new DateInterval('PT' . self::THROUGHPUT_WINDOW_HOURS . 'H'));
+        $runs = $this->runsInWindow($since, $now);
 
         /** @var array<string, array{success: int, failed: int}> $byHour */
         $byHour = [];
@@ -392,6 +448,20 @@ final readonly class EloquentReadModel implements ReadModel
             if ($result->items === []) {
                 break;
             }
+        }
+
+        if (count($runs) < $total) {
+            // Not silently pretended away: a window this busy (more than
+            // WINDOW_PAGE_SAFETY_CAP * RECENT_BATCH_CAP runs) is beyond
+            // what this in-PHP aggregation can page through without an
+            // unbounded loop — log so it's observable, then degrade to
+            // the partial set rather than hang or throw.
+            Log::warning('laravel-flow-admin: KPI/throughput window truncated', [
+                'window_start' => $start->format(DateTimeInterface::ATOM),
+                'window_end' => $end->format(DateTimeInterface::ATOM),
+                'runs_fetched' => count($runs),
+                'runs_total' => $total,
+            ]);
         }
 
         return $runs;
