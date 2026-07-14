@@ -178,6 +178,30 @@ function findPort(catalogEntry, direction, key) {
   return catalogEntry?.[direction]?.find((candidate) => candidate.key === key) ?? null;
 }
 
+/**
+ * Single source of truth for wire validity — used identically when
+ * building the initial edge list from a loaded graph AND when the user
+ * draws a new connection, so a graph that would render red interactively
+ * never renders green just because it was loaded from the server. Mirrors
+ * core's GraphValidator: a wire is valid only if the port TYPES are
+ * compatible (portAccepts) AND the fan-in rule holds (a non-`multiple`
+ * input accepts at most one incoming wire).
+ */
+function wireIsValid(sourcePort, targetPort, fanInOk) {
+  const typeOk = Boolean(sourcePort) && Boolean(targetPort) && portAccepts(targetPort.type, sourcePort.type);
+
+  return typeOk && fanInOk;
+}
+
+function wireVisuals(valid, sourcePortType) {
+  const color = valid ? (PORT_TYPE_COLORS[sourcePortType] ?? FALLBACK_COLOR) : '#ef4444';
+
+  return {
+    style: { stroke: color, strokeWidth: 2, ...(valid ? {} : { strokeDasharray: '4 3' }) },
+    markerEnd: { type: MarkerType.ArrowClosed, color },
+  };
+}
+
 function csrfToken() {
   return document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 }
@@ -212,7 +236,7 @@ function StudioEditorNode({ id, data }) {
           type="target"
           position={Position.Left}
           id={port.key}
-          data-testid={`handle-in-${port.key}`}
+          data-testid={`handle-in-${id}-${port.key}`}
           style={{ top: `${((index + 1) / (inputs.length + 1)) * 100}%`, background: PORT_TYPE_COLORS[port.type] ?? FALLBACK_COLOR }}
         />
       ))}
@@ -222,7 +246,7 @@ function StudioEditorNode({ id, data }) {
           type="source"
           position={Position.Right}
           id={port.key}
-          data-testid={`handle-out-${port.key}`}
+          data-testid={`handle-out-${id}-${port.key}`}
           style={{ top: `${((index + 1) / (outputs.length + 1)) * 100}%`, background: PORT_TYPE_COLORS[port.type] ?? FALLBACK_COLOR }}
         />
       ))}
@@ -244,13 +268,22 @@ function editableGraphToFlowElements({ graph, catalog }) {
     };
   });
 
+  // Tracks non-`multiple` input ports already fed by an earlier wire in
+  // this same list, so a loaded graph with a duplicate fan-in renders the
+  // SECOND wire red exactly like drawing it interactively would (onConnect
+  // applies the identical rule against the live edge list).
+  const wiredInputs = new Set();
+
   const edges = graph.connections.map((wire) => {
     const sourceEntry = catalog[nodes.find((n) => n.id === wire.sourceNodeId)?.data.nodeType];
     const targetEntry = catalog[nodes.find((n) => n.id === wire.targetNodeId)?.data.nodeType];
     const sourcePort = findPort(sourceEntry, 'outputs', wire.sourcePortKey);
     const targetPort = findPort(targetEntry, 'inputs', wire.targetPortKey);
-    const valid = sourcePort && targetPort ? portAccepts(targetPort.type, sourcePort.type) : true;
-    const color = valid ? (PORT_TYPE_COLORS[sourcePort?.type] ?? FALLBACK_COLOR) : '#ef4444';
+    const targetKey = `${wire.targetNodeId}.${wire.targetPortKey}`;
+    const fanInOk = Boolean(targetPort?.multiple) || !wiredInputs.has(targetKey);
+    wiredInputs.add(targetKey);
+
+    const valid = wireIsValid(sourcePort, targetPort, fanInOk);
 
     return {
       id: `${wire.sourceNodeId}.${wire.sourcePortKey}->${wire.targetNodeId}.${wire.targetPortKey}`,
@@ -259,8 +292,7 @@ function editableGraphToFlowElements({ graph, catalog }) {
       sourceHandle: wire.sourcePortKey,
       targetHandle: wire.targetPortKey,
       data: { valid },
-      style: { stroke: color, strokeWidth: 2, ...(valid ? {} : { strokeDasharray: '4 3' }) },
-      markerEnd: { type: MarkerType.ArrowClosed, color },
+      ...wireVisuals(valid, sourcePort?.type),
     };
   });
 
@@ -445,16 +477,13 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
         const targetNode = current.nodes.find((n) => n.id === params.target);
         const sourcePort = findPort(current.catalog[sourceNode?.data.nodeType], 'outputs', params.sourceHandle);
         const targetPort = findPort(current.catalog[targetNode?.data.nodeType], 'inputs', params.targetHandle);
-        const typeOk = sourcePort && targetPort ? portAccepts(targetPort.type, sourcePort.type) : false;
-        const fanInOk = targetPort?.multiple || !current.edges.some((e) => e.target === params.target && e.targetHandle === params.targetHandle);
-        const valid = typeOk && fanInOk;
-        const color = valid ? (PORT_TYPE_COLORS[sourcePort?.type] ?? FALLBACK_COLOR) : '#ef4444';
+        const fanInOk = Boolean(targetPort?.multiple) || !current.edges.some((e) => e.target === params.target && e.targetHandle === params.targetHandle);
+        const valid = wireIsValid(sourcePort, targetPort, fanInOk);
 
         const newEdge = {
           ...params,
           data: { valid },
-          style: { stroke: color, strokeWidth: 2, ...(valid ? {} : { strokeDasharray: '4 3' }) },
-          markerEnd: { type: MarkerType.ArrowClosed, color },
+          ...wireVisuals(valid, sourcePort?.type),
         };
 
         return { ...current, edges: addEdge(newEdge, current.edges) };
@@ -521,20 +550,32 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
   const onSave = useCallback(() => {
     setSaveStatus({ kind: 'saving', message: '' });
 
-    const nodes = state.nodes.map((node) => {
-      // Start from the full current config (preserves any key not backed
-      // by a declared input port — e.g. config set by another tool) and
-      // only convert the JSON-typed DECLARED ports, which the inspector
-      // stores as raw text while editing.
-      const config = { ...node.data.config };
-      node.data.inputs.forEach((port) => {
-        if (port.type === 'json' && typeof config[port.key] === 'string') {
-          config[port.key] = JSON.parse(config[port.key]);
-        }
-      });
+    // Defense-in-depth: canSave already gates the button on !hasConfigError
+    // (computed via jsonFieldError, a SEPARATE try/catch'd JSON.parse over
+    // the same fields), so this should never throw in the normal flow —
+    // but the two checks are not literally the same call, so a future
+    // drift between them must not surface as an uncaught SyntaxError.
+    let nodes;
+    try {
+      nodes = state.nodes.map((node) => {
+        // Start from the full current config (preserves any key not backed
+        // by a declared input port — e.g. config set by another tool) and
+        // only convert the JSON-typed DECLARED ports, which the inspector
+        // stores as raw text while editing.
+        const config = { ...node.data.config };
+        node.data.inputs.forEach((port) => {
+          if (port.type === 'json' && typeof config[port.key] === 'string') {
+            config[port.key] = JSON.parse(config[port.key]);
+          }
+        });
 
-      return { id: node.id, type: node.data.nodeType, config, position: node.position };
-    });
+        return { id: node.id, type: node.data.nodeType, config, position: node.position };
+      });
+    } catch {
+      setSaveStatus({ kind: 'error', message: 'One or more config fields contain invalid JSON.' });
+
+      return;
+    }
 
     const connections = state.edges.map((edge) => ({
       sourceNodeId: edge.source,

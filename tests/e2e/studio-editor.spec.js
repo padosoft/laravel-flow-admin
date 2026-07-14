@@ -69,7 +69,7 @@ test.describe('flow-admin studio editor (E-PR3 canvas editor)', () => {
     // demo.trigger's `out` output is `json`; demo.charge's `authorized`
     // input is `bool` — PortType::accepts() rejects json->bool, so this
     // wire (bypassing demo.validate) must be flagged invalid.
-    await dragConnect(page, 'handle-out-out', 'handle-in-authorized');
+    await dragConnect(page, 'handle-out-start-out', 'handle-in-charge-authorized');
 
     await expect(page.locator('.react-flow__edge')).toHaveCount(edgesBefore + 1);
     await expect(page.getByTestId('studio-invalid-wire-warning')).toBeVisible();

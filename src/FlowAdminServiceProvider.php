@@ -6,6 +6,7 @@ namespace Padosoft\LaravelFlowAdmin;
 
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Padosoft\LaravelFlow\Contracts\DefinitionRepository;
@@ -13,6 +14,7 @@ use Padosoft\LaravelFlow\Dashboard\FlowDashboardReadModel;
 use Padosoft\LaravelFlow\Node\NodeRegistry;
 use Padosoft\LaravelFlowAdmin\Adapters\ArrayReadModel;
 use Padosoft\LaravelFlowAdmin\Adapters\EloquentReadModel;
+use Padosoft\LaravelFlowAdmin\Authorizers\AllowAllAuthorizer;
 use Padosoft\LaravelFlowAdmin\Authorizers\DenyAllAuthorizer;
 use Padosoft\LaravelFlowAdmin\Contracts\ActionAuthorizer;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
@@ -64,6 +66,17 @@ class FlowAdminServiceProvider extends ServiceProvider
             );
 
             if (! is_string($authorizerClass) || ! class_exists($authorizerClass)) {
+                return new DenyAllAuthorizer;
+            }
+
+            // FLOW_ADMIN_AUTHORIZER=allow (config/flow-admin.php) is meant
+            // for local dev / E2E only. A stray or copy-pasted value in a
+            // production .env would otherwise silently disable EVERY
+            // mutation gate, not just Studio editing — refuse it here
+            // regardless of what the config resolved to.
+            if ($authorizerClass === AllowAllAuthorizer::class && $app->environment('production')) {
+                Log::warning('laravel-flow-admin: FLOW_ADMIN_AUTHORIZER=allow is ignored in the production environment; falling back to DenyAllAuthorizer.');
+
                 return new DenyAllAuthorizer;
             }
 

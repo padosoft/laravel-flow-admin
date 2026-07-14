@@ -9,7 +9,7 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![PHP Version](https://img.shields.io/packagist/php-v/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![Laravel](https://img.shields.io/badge/Laravel-%5E13.0-ff2d20?style=flat-square&logo=laravel)](https://laravel.com)
-[![Tests](https://img.shields.io/badge/tests-144%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
+[![Tests](https://img.shields.io/badge/tests-147%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![E2E](https://img.shields.io/badge/playwright-chromium%20%7C%20firefox%20%7C%20webkit-45ba4b?style=flat-square&logo=playwright)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%208-brightgreen?style=flat-square)](https://phpstan.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-pint-7e22ce?style=flat-square)](https://laravel.com/docs/pint)
@@ -81,7 +81,7 @@
 - 🛡️ **Deny-by-default authorizer** — every mutation goes through your `ActionAuthorizer`. No accidents.
 - 🔁 **Auto-refreshing pages** — configurable polling (`/flow/api/live`).
 - 🧱 **Adapter pattern** — `eloquent` for prod, `array` for demos / E2E (deterministic seed-42 fixtures).
-- 🧪 **Battle-tested** — 144 PHPUnit tests, 16 Playwright scenarios (48 runs across Chromium / Firefox / WebKit — 44 pass, 4 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation).
+- 🧪 **Battle-tested** — 147 PHPUnit tests, 16 Playwright scenarios (48 runs across Chromium / Firefox / WebKit — 44 pass, 4 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation).
 - 📦 **Zero-coupling** — built on a public `Contracts\*` surface; engine internals stay `@internal`.
 
 ---
@@ -282,6 +282,8 @@ Every mutation route (resume, reject, replay, cancel, retry-webhook, Studio's ed
 
 `ActionAuthorizer::canEditDefinition()` gates two Studio editor routes: loading a flow's UNREDACTED graph (`GET /studio/{name}/edit-graph`, node `config` included — unlike the read-only canvas's `graph()` endpoint, which redacts it) and saving an edited graph as a new draft (`POST /studio/{name}/draft`). The default `DenyAllAuthorizer` denies both; ship your own `ActionAuthorizer` (or set `FLOW_ADMIN_AUTHORIZER=allow` for local dev/E2E — see `AllowAllAuthorizer`, dev-only, never production) to enable Studio editing.
 
+`GET /studio/catalog` (the editor palette's node-type catalog) is deliberately **not** gated by `canEditDefinition()` — it returns node-type metadata only (names, categories, port shapes), never a flow's `config`, so it's reachable by any request that clears the base `flow-admin.middleware` stack (typically `web,auth`). If your node-type names/descriptions are themselves sensitive, gate this route yourself (e.g. wrap it in additional middleware) before exposing Studio.
+
 Public extension surface (semver-stable from `v0.1.0` →):
 
 - `Padosoft\LaravelFlowAdmin\Contracts\ActionAuthorizer`
@@ -433,13 +435,13 @@ Every push runs through this gate (matrix `php: 8.3, 8.4` × `laravel: 13`):
 composer validate --strict --no-check-publish
 composer format:test          # Laravel Pint
 composer analyse              # PHPStan / Larastan level 8
-composer test                 # PHPUnit — 144 tests, 763 assertions
+composer test                 # PHPUnit — 147 tests, 769 assertions
 npm run lint                  # ESLint flat config
 npm run build                 # Vite build verification
 npm run test:e2e              # Playwright on chromium + firefox + webkit
 ```
 
-Latest local run: **144 tests / 763 assertions / 44 E2E runs passed** (16 Playwright scenarios × 3 browsers, 4 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation).
+Latest local run: **147 tests / 769 assertions / 44 E2E runs passed** (16 Playwright scenarios × 3 browsers, 4 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation).
 
 ---
 
