@@ -15,8 +15,10 @@ use Padosoft\LaravelFlow\FlowRun;
 use Padosoft\LaravelFlow\Graph\GraphDefinition;
 use Padosoft\LaravelFlow\Graph\GraphNode;
 use Padosoft\LaravelFlow\Graph\StoredDefinition;
+use Padosoft\LaravelFlow\Node\NodeRegistry;
 use Padosoft\LaravelFlowAdmin\Adapters\EloquentReadModel;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\KpiSummary;
+use Padosoft\LaravelFlowAdmin\Tests\Stubs\DemoTriggerNode;
 use Padosoft\LaravelFlowAdmin\Tests\TestCase;
 use RuntimeException;
 
@@ -472,7 +474,11 @@ final class EloquentReadModelTest extends TestCase
             }
         };
 
-        $model = new EloquentReadModel($this->app->make(FlowDashboardReadModel::class), $throwingDefinitions);
+        $model = new EloquentReadModel(
+            $this->app->make(FlowDashboardReadModel::class),
+            $throwingDefinitions,
+            $this->app->make(NodeRegistry::class),
+        );
 
         $definitions = $model->definitions();
 
@@ -485,6 +491,85 @@ final class EloquentReadModelTest extends TestCase
 
         $this->assertNotNull($flaky);
         $this->assertSame(0, $flaky->stepCount);
+    }
+
+    public function test_graph_returns_the_published_envelope_and_a_catalog_scoped_to_used_node_types(): void
+    {
+        $registry = $this->app->make(NodeRegistry::class);
+        if (! $registry->has('test.studio.demo-trigger')) {
+            $registry->register(DemoTriggerNode::class);
+        }
+
+        $graphDefinition = new GraphDefinition([
+            new GraphNode('start', 'test.studio.demo-trigger', [], ['x' => 0, 'y' => 0]),
+        ], []);
+
+        $repository = $this->app->make(DefinitionRepository::class);
+        $draft = $repository->createDraft('studio-demo-flow', $graphDefinition);
+        $repository->publish('studio-demo-flow', $draft->version);
+
+        $result = $this->makeModel()->graph('studio-demo-flow');
+
+        $this->assertNotNull($result);
+        $this->assertSame(1, $result['graph']['schema_version']);
+        $this->assertCount(1, $result['graph']['nodes']);
+        $this->assertSame('start', $result['graph']['nodes'][0]['id']);
+        $this->assertArrayHasKey('test.studio.demo-trigger', $result['catalog']);
+        $this->assertSame('json', $result['catalog']['test.studio.demo-trigger']['outputs'][0]['type']);
+    }
+
+    public function test_graph_returns_null_when_no_published_version_exists(): void
+    {
+        $this->assertNull($this->makeModel()->graph('does-not-exist'));
+    }
+
+    public function test_graph_returns_null_when_definition_repository_throws(): void
+    {
+        $throwingDefinitions = new class implements DefinitionRepository
+        {
+            public function createDraft(string $name, GraphDefinition $graph): StoredDefinition
+            {
+                throw new RuntimeException('not used by this test');
+            }
+
+            public function createDraftIfChanged(string $name, GraphDefinition $graph): ?StoredDefinition
+            {
+                throw new RuntimeException('not used by this test');
+            }
+
+            public function find(string $name, int $version): StoredDefinition
+            {
+                throw new RuntimeException('not used by this test');
+            }
+
+            public function latest(string $name, ?string $status = null): ?StoredDefinition
+            {
+                throw new RuntimeException('definitions table unavailable');
+            }
+
+            public function publish(string $name, int $version): StoredDefinition
+            {
+                throw new RuntimeException('not used by this test');
+            }
+
+            public function archive(string $name, int $version): StoredDefinition
+            {
+                throw new RuntimeException('not used by this test');
+            }
+
+            public function versions(string $name): array
+            {
+                throw new RuntimeException('not used by this test');
+            }
+        };
+
+        $model = new EloquentReadModel(
+            $this->app->make(FlowDashboardReadModel::class),
+            $throwingDefinitions,
+            $this->app->make(NodeRegistry::class),
+        );
+
+        $this->assertNull($model->graph('anything'));
     }
 
     public function test_recent_batch_cap_bounds_search_but_not_plain_listing(): void
@@ -612,6 +697,7 @@ final class EloquentReadModelTest extends TestCase
         return new EloquentReadModel(
             $this->app->make(FlowDashboardReadModel::class),
             $this->app->make(DefinitionRepository::class),
+            $this->app->make(NodeRegistry::class),
         );
     }
 

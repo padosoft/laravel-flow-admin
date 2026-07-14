@@ -15,7 +15,8 @@ The package consumes only the public `@api` surface of `padosoft/laravel-flow`:
 
 - `Padosoft\LaravelFlow\Dashboard\FlowDashboardReadModel` — read access to runs, steps, approvals, outbox, KPIs.
 - `Padosoft\LaravelFlow\Dashboard\DashboardActionAuthorizer` — per-action authorisation (deny-by-default).
-- `Padosoft\LaravelFlow\Contracts\DefinitionRepository` — the ONE named exception outside `Dashboard\*`, `@api`-stable, used solely for declared graph/step-count reads that `Dashboard\*` has no primitive for (see Macro E / E-PR0).
+- `Padosoft\LaravelFlow\Contracts\DefinitionRepository` — a named exception outside `Dashboard\*`, `@api`-stable, used for declared graph/step-count reads and fetching a published graph for the Studio canvas (see Macro E / E-PR0, E-PR2).
+- `Padosoft\LaravelFlow\Node\NodeRegistry` / `NodeDefinition` — another named exception, `@api`-stable, the node catalog the Studio canvas needs to know each node's ports/types (see Macro E / E-PR2).
 - Public DTOs: `RunDetail`, `ApprovalSummary`, `KpiSummary`.
 - Status constants on `Padosoft\LaravelFlow\FlowRun`.
 - Action API: `Flow::resume`, `Flow::reject`, `flow:replay`, `flow:deliver-webhooks`.

@@ -20,6 +20,8 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
     ->group(function () {
         Route::get('/', [OverviewController::class, 'index'])->name('overview');
         Route::get('/studio', [StudioController::class, 'index'])->name('studio');
+        Route::get('/studio/{name}/graph', [StudioController::class, 'graph'])->name('studio.graph');
+        Route::get('/studio/{name}', [StudioController::class, 'show'])->name('studio.show');
         Route::get('/runs', [RunsController::class, 'index'])->name('runs.index');
         Route::get('/runs/{id}', [RunDetailController::class, 'show'])->name('runs.show');
         Route::get('/approvals', [ApprovalsController::class, 'index'])->name('approvals.index');
