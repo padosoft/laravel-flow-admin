@@ -45,7 +45,11 @@ use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
  * filtering, and the definitions list only see the most recent
  * `RECENT_BATCH_CAP` runs, not full history. Every other satellite package
  * in this program accepts the identical bound for identical reasons (see
- * `laravel-flow-ai`'s `FlowAdvisor::candidateDefinitionNames()`).
+ * `laravel-flow-ai`'s `FlowAdvisor::candidateDefinitionNames()`). KPIs and
+ * throughput buckets do NOT share this bound — {@see self::runsInWindow()}
+ * pages through every run in the requested window instead of stopping at
+ * `RECENT_BATCH_CAP`, since those are numeric aggregates rather than a
+ * "recent list" UX affordance.
  */
 final readonly class EloquentReadModel implements ReadModel
 {
@@ -64,6 +68,16 @@ final readonly class EloquentReadModel implements ReadModel
     private const RECENT_BATCH_CAP = 200;
 
     private const THROUGHPUT_WINDOW_HOURS = 48;
+
+    /**
+     * Defensive ceiling on how many `RECENT_BATCH_CAP`-sized pages
+     * `runsInWindow()` will fetch while paging through a KPI/throughput
+     * window. Unlike `RECENT_BATCH_CAP` (an intentional "recent list" UX
+     * bound), KPI aggregates must reflect the full window population —
+     * this only guards against a pathologically busy window running away.
+     * 20 * RECENT_BATCH_CAP = 4,000 runs per window.
+     */
+    private const WINDOW_PAGE_SAFETY_CAP = 20;
 
     public function __construct(
         private FlowDashboardReadModel $reader,
@@ -213,8 +227,12 @@ final readonly class EloquentReadModel implements ReadModel
         $windowStart = $windowNow->sub(new DateInterval('P1D'));
         $prevWindowStart = $windowStart->sub(new DateInterval('P1D'));
 
+        // The previous window's end is exclusive (one second short of
+        // $windowStart): both RunFilter::$startedSince and $startedUntil
+        // are inclusive in core, so without this a run started exactly at
+        // $windowStart would be counted in BOTH windows.
         $window = $this->runsInWindow($windowStart, $windowNow);
-        $previous = $this->runsInWindow($prevWindowStart, $windowStart);
+        $previous = $this->runsInWindow($prevWindowStart, $windowStart->sub(new DateInterval('PT1S')));
 
         $windowRates = $this->windowRates($window);
         $previousRates = $this->windowRates($previous);
@@ -339,14 +357,32 @@ final readonly class EloquentReadModel implements ReadModel
     }
 
     /**
+     * Unlike `recentRuns()` (an intentionally bounded "recent list" UX
+     * scope), KPI and throughput aggregates must reflect the full window
+     * population — this pages through every match up to
+     * `WINDOW_PAGE_SAFETY_CAP` pages.
+     *
      * @return list<DashboardRunSummary>
      */
     private function runsInWindow(DateTimeImmutable $start, DateTimeImmutable $end): array
     {
-        return $this->reader->listRuns(
-            new RunFilter(startedSince: $start, startedUntil: $end),
-            new Pagination(1, self::RECENT_BATCH_CAP),
-        )->items;
+        $filter = new RunFilter(startedSince: $start, startedUntil: $end);
+        $runs = [];
+        $page = 1;
+        $total = null;
+
+        while ($total === null || (count($runs) < $total && $page <= self::WINDOW_PAGE_SAFETY_CAP)) {
+            $result = $this->reader->listRuns($filter, new Pagination($page, self::RECENT_BATCH_CAP));
+            $runs = [...$runs, ...$result->items];
+            $total = $result->total;
+            $page++;
+
+            if ($result->items === []) {
+                break;
+            }
+        }
+
+        return $runs;
     }
 
     /**

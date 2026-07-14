@@ -395,6 +395,52 @@ final class EloquentReadModelTest extends TestCase
         $this->assertSame(0, $outsideWindow->total);
     }
 
+    public function test_kpis_are_not_truncated_by_the_recent_batch_cap_within_the_24h_window(): void
+    {
+        // runsInWindow() pages through every match instead of stopping at
+        // RECENT_BATCH_CAP (200) like recentRuns() intentionally does —
+        // seed more than the cap, all inside the rolling 24h KPI window,
+        // and assert the full count survives.
+        $cap = 200;
+        $now = new DateTimeImmutable('now', new DateTimeZone(self::UTC));
+        $seeded = $cap + 25;
+
+        for ($i = 0; $i < $seeded; $i++) {
+            $this->seedRun([
+                'id' => sprintf('run-kpi-cap-%04d', $i),
+                'status' => FlowRun::STATUS_SUCCEEDED,
+                'started_at' => $now->sub(new DateInterval('PT1H'))->sub(new DateInterval(sprintf('PT%dS', $i))),
+                'duration_ms' => 100,
+            ]);
+        }
+
+        $kpis = $this->makeModel()->kpis();
+
+        $this->assertSame($seeded, $kpis->totalRuns);
+    }
+
+    public function test_kpi_window_boundary_does_not_double_count_a_run(): void
+    {
+        // A run started exactly at the current/previous window boundary
+        // must be counted in exactly one of the two windows, not both.
+        $now = new DateTimeImmutable('now', new DateTimeZone(self::UTC));
+        $windowStart = $now->sub(new DateInterval('P1D'));
+
+        $this->seedRun([
+            'id' => 'run-on-boundary',
+            'status' => FlowRun::STATUS_SUCCEEDED,
+            'started_at' => $windowStart,
+            'duration_ms' => 100,
+        ]);
+
+        $kpis = $this->makeModel()->kpis();
+
+        // If the boundary run were double-counted, totalRuns would be 2
+        // (present in both the current and previous window aggregates).
+        $this->assertSame(1, $kpis->totalRuns);
+        $this->assertSame(1, $kpis->deltaTotalRuns);
+    }
+
     private function makeModel(): EloquentReadModel
     {
         return new EloquentReadModel(
