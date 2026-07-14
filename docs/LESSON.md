@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-07-14 — E-PR1 (React island pipeline): `defaults.run.working-directory` silently doesn't apply to `uses:` steps, and a "build once" fix that wasn't
+
+### `actions/upload-artifact` / `actions/download-artifact`'s `path:` is workspace-root-relative even inside a job with `defaults.run.working-directory` set
+
+This is the SAME footgun E-PR0's CI fix already hit once for `hashFiles()`, `setup-node`'s `cache-dependency-path`, and `upload-artifact`'s own `path:` — and it bit again here, in a *new* `download-artifact` step added later in the same job. `defaults.run.working-directory` only rewrites the cwd for `run:` (shell) steps; every `uses:` (action) step's own path-shaped inputs stay resolved against `$GITHUB_WORKSPACE` regardless. A `download-artifact` step with `path: public/vendor/flow-admin/` in a job whose checkout lives at `laravel-flow-admin/` (via the checkout step's own `path:`) silently downloads the artifact to a *sibling* of the real checkout — and the step still reports `outcome: success`, so an `if: steps.<id>.outcome != 'success'` fallback guard never fires either. The bug is invisible in the workflow file (no syntax error, no failed step) and only shows up as "the build output isn't where the app expects it" inside a LATER step.
+
+**How to apply:** any time a job sets `defaults.run.working-directory` because it checks out into a subdirectory (the path-repo-sibling pattern this program uses whenever a package depends on an unreleased sibling via a local Composer `path` repository), audit **every** `uses:` step's path-shaped `with:` values by hand — `hashFiles()` calls in `if:` conditions, `cache-dependency-path`, `upload-artifact`/`download-artifact`'s `path`, anything else that looks like a filesystem path passed to an action rather than a shell command. Grep for the checkout subdirectory name in the job and manually verify each `uses:` step's paths are prefixed with it. Don't assume "the job builds and green-checks" proves the paths are right — a `download-artifact` landing in the wrong place doesn't fail the step, it just quietly breaks whatever consumes the download three steps later, exactly the way this one did.
+
+### A "reduce the redundant build" fix that only moves code without measuring what it costs isn't actually a fix
+
+The first pass at "the e2e browser matrix job builds the Vite bundle 3x, once per browser" moved the `npm run build` call from inside the `test:e2e` npm script into its own named CI step — which changed *where* the build ran, not *how many times*. Each matrix leg (chromium/firefox/webkit) is still a fully separate GitHub Actions runner with its own checkout, so the total build count was unchanged; the "fix" was purely cosmetic and a second review round caught it immediately by counting invocations against the actual job topology, not by reading the step names. The REAL fix needed cross-job artifact sharing (`frontend` job builds once, uploads via `actions/upload-artifact`; the `e2e` matrix downloads it). **How to apply:** when a review flags "this runs N times unnecessarily," verify the fix by tracing the actual execution graph (which jobs/matrix legs run, and whether each independently re-executes the step), not by confirming the code *looks* different — a step moved to a new name/location in the same job still runs the same number of times the job itself runs.
+
+---
+
 ## 2026-07-14 — E-PR0 (Dashboard read-model rewrite): path-repo CI, "no search = no cap", and a "@api-only" surface exception
 
 ### `composer.json`'s local `path` repository needs its OWN sibling checkout step in CI — a single-repo `actions/checkout` silently breaks `composer install`
