@@ -53,7 +53,7 @@ Squash-merged onto `main` at SHA `f32ac2f` (macro PR #2).
 | Branch | Base | Status |
 |--------|------|--------|
 | `main` | n/a | active release branch |
-| `task/v2e-studio` | `main` | **ACTIVE — Macro E (Flow Studio UI)**. E-PR0 merged (PR #30 + docs follow-up PR #31). Next subtask: E-PR1 (React island pipeline), branch off `task/v2e-studio`, e.g. `task/v2e-01-react-island`. |
+| `task/v2e-studio` | `main` | **ACTIVE — Macro E (Flow Studio UI)**. E-PR0 merged (PR #30 + docs follow-up PR #31); E-PR1 merged (PR #33 + docs follow-up PR #34). Next subtask: E-PR2 (read-only canvas rendering), branch off `task/v2e-studio`, e.g. `task/v2e-02-canvas-readonly`. |
 | `task/read-model-adapter` | `main` | merged via PR #20 |
 | `subtask/read-model-2-eloquent` | `task/read-model-adapter` | merged via PR #19 |
 
