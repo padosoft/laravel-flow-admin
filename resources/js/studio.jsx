@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { StrictMode, useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ReactFlow,
@@ -10,6 +10,8 @@ import {
   Position,
   useReactFlow,
   addEdge,
+  applyNodeChanges,
+  applyEdgeChanges,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import '../css/studio.css';
@@ -204,6 +206,21 @@ function wireVisuals(valid, sourcePortType) {
 
 function csrfToken() {
   return document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+}
+
+/**
+ * Collision-free across reloads/sessions — a per-mount incrementing
+ * counter (the prior approach) resets to 0 every time the editor page
+ * loads, so dropping the same node type in two different sessions
+ * produces the SAME id, which core's GraphDefinition rejects as a
+ * "Duplicate node id" 422 on save.
+ */
+function generateNodeId(type) {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${type}-${crypto.randomUUID()}`;
+  }
+
+  return `${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
@@ -413,7 +430,6 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
   const [state, setState] = useState({ status: 'loading', nodes: [], edges: [], catalog: {} });
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [saveStatus, setSaveStatus] = useState({ kind: 'idle', message: '' });
-  const nodeIdCounter = useRef(0);
   const { screenToFlowPosition } = useReactFlow();
 
   useEffect(() => {
@@ -494,18 +510,25 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
 
   const onNodesChange = useCallback((changes) => {
     setState((current) => {
-      let nodes = current.nodes;
-      for (const change of changes) {
-        if (change.type === 'position' && change.position) {
-          nodes = nodes.map((n) => (n.id === change.id ? { ...n, position: change.position } : n));
-        }
-        if (change.type === 'remove') {
-          nodes = nodes.filter((n) => n.id !== change.id);
-        }
-      }
+      const nodes = applyNodeChanges(changes, current.nodes);
 
-      return { ...current, nodes };
+      // A removed node's edges are NOT pruned by applyNodeChanges (it only
+      // touches the nodes array) — without this, a dangling edge stays in
+      // state.edges referencing a node id that no longer exists, which
+      // canSave doesn't re-validate (so Save stays enabled) and the server
+      // then rejects with a violation the user can't correlate to anything
+      // still visible on the canvas.
+      const removedIds = new Set(changes.filter((change) => change.type === 'remove').map((change) => change.id));
+      const edges = removedIds.size > 0
+        ? current.edges.filter((edge) => !removedIds.has(edge.source) && !removedIds.has(edge.target))
+        : current.edges;
+
+      return { ...current, nodes, edges };
     });
+  }, []);
+
+  const onEdgesChange = useCallback((changes) => {
+    setState((current) => ({ ...current, edges: applyEdgeChanges(changes, current.edges) }));
   }, []);
 
   const onDrop = useCallback(
@@ -519,7 +542,7 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
         if (!entry) return current;
 
         const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-        const id = `${type}-${nodeIdCounter.current++}`;
+        const id = generateNodeId(type);
         const config = {};
         entry.inputs.forEach((port) => {
           config[port.key] = port.type === 'json' ? '{}' : port.type === 'bool' ? false : port.type === 'text' || port.type === 'any' ? '' : null;
@@ -651,6 +674,7 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
           nodes={state.nodes}
           edges={state.edges}
           onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={(_, node) => setSelectedNodeId(node.id)}
           onPaneClick={() => setSelectedNodeId(null)}

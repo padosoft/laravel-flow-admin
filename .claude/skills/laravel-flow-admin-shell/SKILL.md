@@ -15,8 +15,9 @@ The package consumes only the public `@api` surface of `padosoft/laravel-flow`:
 
 - `Padosoft\LaravelFlow\Dashboard\FlowDashboardReadModel` — read access to runs, steps, approvals, outbox, KPIs.
 - `Padosoft\LaravelFlow\Dashboard\DashboardActionAuthorizer` — per-action authorisation (deny-by-default).
-- `Padosoft\LaravelFlow\Contracts\DefinitionRepository` — a named exception outside `Dashboard\*`, `@api`-stable, used for declared graph/step-count reads and fetching a published graph for the Studio canvas (see Macro E / E-PR0, E-PR2).
-- `Padosoft\LaravelFlow\Node\NodeRegistry` / `NodeDefinition` — another named exception, `@api`-stable, the node catalog the Studio canvas needs to know each node's ports/types (see Macro E / E-PR2).
+- `Padosoft\LaravelFlow\Contracts\DefinitionRepository` — a named exception outside `Dashboard\*`, `@api`-stable, used for declared graph/step-count reads, fetching a published graph for the Studio canvas, and saving an edited graph as a new draft (`createDraft()`) from the Studio editor (see Macro E / E-PR0, E-PR2, E-PR3).
+- `Padosoft\LaravelFlow\Node\NodeRegistry` / `NodeDefinition` / `Attributes\{FlowNode,Input,Output}` / `PortType` — another named exception, `@api`-stable, the node catalog the Studio canvas needs to know each node's ports/types; the `Attributes`/`PortType` classes are consumed by `src/Fixtures/DemoNodes/*` to register real, `GraphValidator`-checkable node types for the `array` demo adapter (see Macro E / E-PR2, E-PR3).
+- `Padosoft\LaravelFlow\Graph\GraphSerializer` / `GraphValidator` / `StoredDefinition` / `Exceptions\InvalidGraphException` — another named exception, `@api`-stable, used by the Studio editor's save-as-draft endpoint to structurally (`GraphSerializer::fromArray()`) and semantically (`GraphValidator::validate()`) re-validate an edited graph before persisting — the client's inline validation is advisory only and is never trusted (see Macro E / E-PR3).
 - Public DTOs: `RunDetail`, `ApprovalSummary`, `KpiSummary`.
 - Status constants on `Padosoft\LaravelFlow\FlowRun`.
 - Action API: `Flow::resume`, `Flow::reject`, `flow:replay`, `flow:deliver-webhooks`.
