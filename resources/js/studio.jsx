@@ -13,6 +13,11 @@ function StudioApp() {
   return (
     <div data-testid="flow-studio-canvas" style={{ width: '100%', height: '100%' }}>
       <ReactFlowProvider>
+        {/* hideAttribution is explicitly MIT-permitted, not a Pro-only
+            feature — xyflow's own docs: "Anyone is free to remove this
+            attribution whether they're a Pro subscriber or not." Keeping
+            the admin panel's own chrome (sidebar/topbar) consistent takes
+            priority over a third-party badge. */}
         <ReactFlow nodes={[]} edges={[]} fitView proOptions={{ hideAttribution: true }}>
           <Background />
         </ReactFlow>

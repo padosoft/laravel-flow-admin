@@ -130,6 +130,65 @@ final class StudioAssetRouteTest extends TestCase
         $second->assertStatus(304);
     }
 
+    public function test_studio_js_returns_304_when_if_modified_since_is_later_than_the_file(): void
+    {
+        // RFC 7232 §3.3: If-Modified-Since is a "no older than" floor, not
+        // an exact-match key. A client MAY send a timestamp later than the
+        // file's real mtime (clock skew, second-level rounding) and must
+        // still get 304, not a fresh 200 body.
+        $this->seedFixtureBuild();
+
+        $first = $this->get('/_flow-admin/assets/studio.js');
+        $first->assertStatus(200);
+        $lastModified = $first->headers->get('Last-Modified');
+        $this->assertNotNull($lastModified);
+
+        $later = gmdate('D, d M Y H:i:s', strtotime((string) $lastModified) + 3600) . ' GMT';
+
+        $second = $this->withHeaders([
+            'If-Modified-Since' => $later,
+        ])->get('/_flow-admin/assets/studio.js');
+
+        $second->assertStatus(304);
+    }
+
+    public function test_studio_js_404_response_is_not_cacheable(): void
+    {
+        $response = $this->get('/_flow-admin/assets/studio.js');
+
+        $response->assertStatus(404);
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
+    }
+
+    public function test_studio_js_rejects_a_manifest_entry_pointing_outside_the_build_root(): void
+    {
+        // Defense in depth: the manifest is build-tool-controlled, but this
+        // route is reachable pre-auth. A manifest entry containing a path
+        // traversal sequence must never let the controller stream a file
+        // outside public/vendor/flow-admin/.
+        mkdir($this->buildDir . '/.vite', recursive: true);
+        mkdir(dirname($this->buildDir) . '/secret-outside-build-root', recursive: true);
+        file_put_contents(dirname($this->buildDir) . '/secret-outside-build-root/secret.js', 'window.__leaked = true;');
+
+        file_put_contents($this->buildDir . '/.vite/manifest.json', json_encode([
+            'resources/js/studio.jsx' => [
+                'file' => '../secret-outside-build-root/secret.js',
+                'name' => 'studio',
+                'src' => 'resources/js/studio.jsx',
+                'isEntry' => true,
+            ],
+        ], JSON_THROW_ON_ERROR));
+
+        try {
+            $response = $this->get('/_flow-admin/assets/studio.js');
+
+            $response->assertStatus(404);
+        } finally {
+            unlink(dirname($this->buildDir) . '/secret-outside-build-root/secret.js');
+            rmdir(dirname($this->buildDir) . '/secret-outside-build-root');
+        }
+    }
+
     public function test_studio_asset_routes_are_named_for_blade_tags(): void
     {
         $this->assertStringEndsWith('/_flow-admin/assets/studio.js', route('flow-admin.assets.studio-js'));
