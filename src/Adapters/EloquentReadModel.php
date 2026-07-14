@@ -35,6 +35,7 @@ use Padosoft\LaravelFlowAdmin\Contracts\Dto\Step;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ThroughputBucket;
 use Padosoft\LaravelFlowAdmin\Contracts\PaginatedResult;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
+use Padosoft\LaravelFlowAdmin\Support\GraphRedactor;
 use Throwable;
 
 /**
@@ -433,7 +434,7 @@ final readonly class EloquentReadModel implements ReadModel
         }
 
         return [
-            'graph' => $stored->graph,
+            'graph' => GraphRedactor::stripNodeConfig($stored->graph),
             'catalog' => $catalog,
         ];
     }

@@ -18,6 +18,7 @@ use Padosoft\LaravelFlowAdmin\Contracts\Dto\Step;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ThroughputBucket;
 use Padosoft\LaravelFlowAdmin\Contracts\PaginatedResult;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
+use Padosoft\LaravelFlowAdmin\Support\GraphRedactor;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
@@ -395,14 +396,17 @@ final class ArrayReadModel implements ReadModel
         }
 
         return [
-            'graph' => [
+            'graph' => GraphRedactor::stripNodeConfig([
                 'schema_version' => 1,
                 'kind' => 'laravel-flow',
                 'metadata' => [],
                 'nodes' => [
                     ['id' => 'start', 'type' => 'demo.trigger', 'config' => [], 'position' => ['x' => 0, 'y' => 0]],
                     ['id' => 'validate', 'type' => 'demo.validate', 'config' => [], 'position' => ['x' => 260, 'y' => 0]],
-                    ['id' => 'charge', 'type' => 'demo.charge', 'config' => [], 'position' => ['x' => 520, 'y' => 0]],
+                    // Non-empty config here, on purpose: it is the fixture that
+                    // proves GraphRedactor::stripNodeConfig() actually strips a
+                    // secret-shaped key before this envelope reaches the browser.
+                    ['id' => 'charge', 'type' => 'demo.charge', 'config' => ['api_key' => 'sk_test_fixture_do_not_leak'], 'position' => ['x' => 520, 'y' => 0]],
                     ['id' => 'notify', 'type' => 'demo.notify', 'config' => [], 'position' => ['x' => 780, 'y' => 0]],
                 ],
                 'connections' => [
@@ -410,7 +414,7 @@ final class ArrayReadModel implements ReadModel
                     ['sourceNodeId' => 'validate', 'sourcePortKey' => 'valid', 'targetNodeId' => 'charge', 'targetPortKey' => 'authorized'],
                     ['sourceNodeId' => 'charge', 'sourcePortKey' => 'receipt', 'targetNodeId' => 'notify', 'targetPortKey' => 'message'],
                 ],
-            ],
+            ]),
             'catalog' => [
                 'demo.trigger' => [
                     'type' => 'demo.trigger',

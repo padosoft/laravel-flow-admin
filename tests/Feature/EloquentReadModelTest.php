@@ -501,7 +501,7 @@ final class EloquentReadModelTest extends TestCase
         }
 
         $graphDefinition = new GraphDefinition([
-            new GraphNode('start', 'test.studio.demo-trigger', [], ['x' => 0, 'y' => 0]),
+            new GraphNode('start', 'test.studio.demo-trigger', ['api_key' => 'sk_test_should_never_leak'], ['x' => 0, 'y' => 0]),
         ], []);
 
         $repository = $this->app->make(DefinitionRepository::class);
@@ -514,6 +514,7 @@ final class EloquentReadModelTest extends TestCase
         $this->assertSame(1, $result['graph']['schema_version']);
         $this->assertCount(1, $result['graph']['nodes']);
         $this->assertSame('start', $result['graph']['nodes'][0]['id']);
+        $this->assertArrayNotHasKey('config', $result['graph']['nodes'][0]);
         $this->assertArrayHasKey('test.studio.demo-trigger', $result['catalog']);
         $this->assertSame('json', $result['catalog']['test.studio.demo-trigger']['outputs'][0]['type']);
     }

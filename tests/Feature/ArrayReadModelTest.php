@@ -70,6 +70,13 @@ final class ArrayReadModelTest extends TestCase
         $this->assertSame('json', $result['catalog']['demo.trigger']['outputs'][0]['type']);
         $this->assertSame('bool', $result['catalog']['demo.validate']['outputs'][0]['type']);
         $this->assertSame('text', $result['catalog']['demo.charge']['outputs'][0]['type']);
+
+        // The fixture's 'charge' node carries a fake secret-shaped config
+        // key on purpose — proves GraphRedactor strips it before this
+        // response leaves the adapter.
+        foreach ($result['graph']['nodes'] as $node) {
+            $this->assertArrayNotHasKey('config', $node);
+        }
     }
 
     public function test_array_read_model_returns_null_graph_for_an_unknown_flow(): void
