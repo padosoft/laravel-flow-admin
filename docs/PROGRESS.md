@@ -5,18 +5,18 @@
 
 ## Now / Next / Blocked
 
-- **Now**: roadmap implementation merged to `main` via macro PR #20 (`task/read-model-adapter` → `main`, merge SHA `2c80d11`).
-- **Now (validated locally on 2026-05-06)**:
+- **Now (2026-07-14)**: Macro E (Flow Studio UI, Laravel Flow 2.0 program) started. **E-PR0 DONE**: `task/v2e-00-hygiene` merged into macro branch `task/v2e-studio` via PR #30 (squash, commit `d4c63f5`), 6 rounds of local Copilot CLI review + 2 rounds of PR-level Copilot/Codex review, all converged to zero outstanding findings. Delivered: `composer.json` retargeted to core `dev-main` via a local `path` repository (core has no v2 tag yet); `EloquentReadModel` rewritten to route every read through core's `@api` `Dashboard\FlowDashboardReadModel` + `Contracts\DefinitionRepository` (zero raw `DB::table('flow_*')` calls); a real pre-existing bug fixed (declared step count was reading step-execution rows, not the definition's declared graph node count); plain listing/single-status filtering on runs/approvals/outbox now uses true unbounded server-side pagination (only free-text search — or, for runs, the compound `'failed'` status / a flow-prefix filter — still scans the 200-most-recent-runs bound, since core's exact-match-only filters can't express those queries server-side); a real N+1 eliminated on the runs list (was one `findRun()` call — 5 queries + full detail hydration — per row; fixed via a small companion core PR, `padosoft/laravel-flow#90`, adding `FlowDashboardReadModel::stepCounts()`); the Claude Design "Flow Studio UI" template copied into `design/claude-design-template/` (separate from the pre-existing `.design-source/project/`, the already-implemented v1 panel design); CI's `php`/`e2e` jobs updated to checkout core as a true sibling directory so the path-repo dependency resolves on GitHub Actions.
+- **Now (validated locally, 2026-07-14)**:
   - `composer validate --strict --no-check-publish` ✅
   - `composer format:test` ✅
-  - `composer analyse` ✅
-  - `composer test` ✅ (101 tests, 584 assertions)
-  - `npm run lint` ✅
-  - `npm run build` ✅
-  - `npm run test:e2e` ✅ (18 passed, 3 visual-gated skipped)
-- **Now**: PR #19 (subtask) and PR #20 (macro) are both merged with all required CI checks green.
-- **Next**: publish release tags and move to maintenance (dependabot/security follow-up PRs still open).
+  - `composer analyse` (PHPStan level 8) ✅
+  - `composer test` ✅ (111 tests, 606 assertions)
+- **Next**: E-PR1 — React island pipeline (Vite build, mount point, asset publishing, `@xyflow/react` dependency), on a subtask branch off `task/v2e-studio`, per `docs/superpowers/plans/2026-07-14-macro-e-studio-ui.md` in the core repo.
 - **Blocked**: none.
+
+### Prior state (pre-Macro-E, archived)
+
+- Roadmap implementation merged to `main` via macro PR #20 (`task/read-model-adapter` → `main`, merge SHA `2c80d11`); validated locally on 2026-05-06 at 101 tests / 584 assertions, `npm run test:e2e` 18 passed / 3 visual-gated skipped; PR #19 (subtask) and PR #20 (macro) both merged with all required CI checks green. Publishing release tags was the next step before Macro E's `dev-main` retarget superseded it (`padosoft/laravel-flow` has no v2 tag yet, so a new admin release waits for that).
 
 ## Macro 2 — DONE ✅
 
