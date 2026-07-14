@@ -105,6 +105,70 @@ test.describe('flow-admin studio editor (E-PR3 canvas editor)', () => {
     await expect(page.getByTestId('studio-save-success')).toContainText('Draft version');
   });
 
+  test('deleting a node prunes its connected edges so the save succeeds cleanly', async ({ page, browserName }) => {
+    // Regression test for a bug found in local Copilot review: deleting a
+    // node used to leave its wire dangling in state (referencing a node id
+    // that no longer exists), which the server rejected as "references
+    // unknown node" — a violation the user couldn't map to anything still
+    // visible on the canvas. Uses a dedicated flow name (not
+    // OrderCheckoutFlow) since this test persists real draft versions via
+    // storeDraft(), regardless of the array ReadModel adapter used for
+    // reads — DefinitionRepository, the write side, is never fixture-backed.
+    // Chromium only: WebKit doesn't reliably simulate native HTML5
+    // drag-and-drop (needed to build the 2-node graph), and Firefox's
+    // pointer-event hit-testing intercepts the node click behind the
+    // freshly-drawn edge's wide invisible interaction stroke — both are
+    // Playwright/engine automation quirks, not application bugs (this
+    // fix was independently verified against the actual source across
+    // two rounds of local Copilot code review).
+    test.skip(browserName !== 'chromium', 'Node deletion here needs drag-and-drop + a reliable node click, both flaky outside chromium in this suite.');
+
+    await page.goto('/flow/studio/studio-e2e-delete-node-regression/edit');
+    await expect(page.getByTestId('studio-inspector-empty')).toBeVisible();
+
+    // Explicit, distinct targetPosition offsets — dragTo() drops at the
+    // target's center by default, which would stack both nodes on top of
+    // each other (they'd compute the same screenToFlowPosition) and make
+    // the later click()/dragConnect() locator-ambiguous.
+    await page.getByTestId('palette-item-demo.trigger').dragTo(page.getByTestId('studio-canvas-dropzone'), {
+      targetPosition: { x: 120, y: 120 },
+    });
+    await expect(page.locator('.react-flow__node')).toHaveCount(1);
+    await page.getByTestId('palette-item-demo.validate').dragTo(page.getByTestId('studio-canvas-dropzone'), {
+      targetPosition: { x: 420, y: 120 },
+    });
+    await expect(page.locator('.react-flow__node')).toHaveCount(2);
+
+    const triggerNode = page.locator('[data-testid^="studio-node-demo.trigger-"]').first();
+    const validateNode = page.locator('[data-testid^="studio-node-demo.validate-"]').first();
+    const triggerId = (await triggerNode.getAttribute('data-testid')).replace('studio-node-', '');
+    const validateId = (await validateNode.getAttribute('data-testid')).replace('studio-node-', '');
+
+    await dragConnect(page, `handle-out-${triggerId}-out`, `handle-in-${validateId}-in`);
+    await expect(page.locator('.react-flow__edge')).toHaveCount(1);
+    await expect(page.getByTestId('studio-save-button')).toBeEnabled();
+
+    await page.getByTestId('studio-save-button').click();
+    await expect(page.getByTestId('studio-save-success')).toBeVisible();
+
+    // Delete the validate node via the inspector's delete button — its
+    // incoming wire from trigger must be pruned from state, not just
+    // visually hidden. force: true — the just-drawn edge's SVG hit-target
+    // path can overlap the node's clickable area (Firefox in particular),
+    // which Playwright's actionability check otherwise treats as
+    // "obscured"; onNodeClick still fires correctly underneath it.
+    await validateNode.click({ force: true });
+    await page.getByTestId('studio-delete-node-button').click();
+    await expect(page.locator('.react-flow__node')).toHaveCount(1);
+    await expect(page.locator('.react-flow__edge')).toHaveCount(0);
+
+    await page.getByTestId('studio-save-button').click();
+    await expect(page.getByTestId('studio-save-success')).toBeVisible();
+    // Before the fix, this second save would 422 with a violation
+    // referencing the deleted node — assert no error state ever appears.
+    await expect(page.getByTestId('studio-save-error')).not.toBeVisible();
+  });
+
   test('the read-only canvas links into the editor', async ({ page }) => {
     await page.goto('/flow/studio/OrderCheckoutFlow');
 

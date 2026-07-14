@@ -378,7 +378,7 @@ function ConfigField({ port, value, onChange }) {
   );
 }
 
-function InspectorPanel({ node, onChangeConfig }) {
+function InspectorPanel({ node, onChangeConfig, onDeleteNode }) {
   if (!node) {
     return (
       <div className="studio-inspector empty" data-testid="studio-inspector-empty">
@@ -404,6 +404,9 @@ function InspectorPanel({ node, onChangeConfig }) {
           />
         </label>
       ))}
+      <button type="button" className="studio-inspector-delete" onClick={() => onDeleteNode(node.id)} data-testid="studio-delete-node-button">
+        Delete node
+      </button>
     </div>
   );
 }
@@ -570,6 +573,18 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
     }));
   }, []);
 
+  // Routed through the same onNodesChange the canvas itself uses (for
+  // drag-driven position updates and @xyflow/react's native
+  // click-to-select-then-Backspace deletion) — one code path, so a node
+  // deleted via this button prunes its connected edges identically.
+  const onDeleteNode = useCallback(
+    (nodeId) => {
+      onNodesChange([{ type: 'remove', id: nodeId }]);
+      setSelectedNodeId(null);
+    },
+    [onNodesChange],
+  );
+
   const onSave = useCallback(() => {
     setSaveStatus({ kind: 'saving', message: '' });
 
@@ -703,7 +718,7 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
           )}
         </div>
       </div>
-      <InspectorPanel node={selectedNode} onChangeConfig={onChangeConfig} />
+      <InspectorPanel node={selectedNode} onChangeConfig={onChangeConfig} onDeleteNode={onDeleteNode} />
     </div>
   );
 }

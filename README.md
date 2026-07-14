@@ -81,7 +81,7 @@
 - 🛡️ **Deny-by-default authorizer** — every mutation goes through your `ActionAuthorizer`. No accidents.
 - 🔁 **Auto-refreshing pages** — configurable polling (`/flow/api/live`).
 - 🧱 **Adapter pattern** — `eloquent` for prod, `array` for demos / E2E (deterministic seed-42 fixtures).
-- 🧪 **Battle-tested** — 147 PHPUnit tests, 16 Playwright scenarios (48 runs across Chromium / Firefox / WebKit — 44 pass, 4 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation).
+- 🧪 **Battle-tested** — 147 PHPUnit tests, 17 Playwright scenarios (51 runs across Chromium / Firefox / WebKit — 45 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario).
 - 📦 **Zero-coupling** — built on a public `Contracts\*` surface; engine internals stay `@internal`.
 
 ---
@@ -441,7 +441,7 @@ npm run build                 # Vite build verification
 npm run test:e2e              # Playwright on chromium + firefox + webkit
 ```
 
-Latest local run: **147 tests / 769 assertions / 44 E2E runs passed** (16 Playwright scenarios × 3 browsers, 4 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation).
+Latest local run: **147 tests / 769 assertions / 45 E2E runs passed** (17 Playwright scenarios × 3 browsers, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser limitations on one node-deletion scenario).
 
 ---
 
