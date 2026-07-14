@@ -393,7 +393,21 @@ final readonly class EloquentReadModel implements ReadModel
     {
         try {
             $stored = $this->definitions->latest($name, StoredDefinition::STATUS_PUBLISHED);
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            // Fail closed (the controller reports a routine 404, same as
+            // "not published") — but unlike declaredStepCount()'s "degrade
+            // a metric to 0" case, a failure here can mean the stored
+            // definition's signature verification failed (tampering, or a
+            // broken signing-secret rotation), which an operator needs to
+            // be able to notice. Log the message only — never the
+            // exception's full context, which could carry the stored
+            // graph's contents.
+            Log::warning('laravel-flow-admin: failed to resolve the published graph for a flow definition', [
+                'name' => $name,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+
             return null;
         }
 
