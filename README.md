@@ -80,7 +80,7 @@
 - 🛡️ **Deny-by-default authorizer** — every mutation goes through your `ActionAuthorizer`. No accidents.
 - 🔁 **Auto-refreshing pages** — configurable polling (`/flow/api/live`).
 - 🧱 **Adapter pattern** — `eloquent` for prod, `array` for demos / E2E (deterministic seed-42 fixtures).
-- 🧪 **Battle-tested** — 111 PHPUnit tests, 7 Playwright scenarios (21 runs across Chromium / Firefox / WebKit).
+- 🧪 **Battle-tested** — 111 PHPUnit tests, 8 Playwright scenarios (24 runs across Chromium / Firefox / WebKit — 21 pass, 3 visual-gated skipped).
 - 📦 **Zero-coupling** — built on a public `Contracts\*` surface; engine internals stay `@internal`.
 
 ---
@@ -341,6 +341,7 @@ All routes live under the configured prefix (default `/flow`) and the `flow-admi
 | Method | URI | Name | Purpose |
 | --- | --- | --- | --- |
 | `GET` | `/` | `flow-admin.overview` | Dashboard |
+| `GET` | `/studio` | `flow-admin.studio` | Flow Studio (React + `@xyflow/react` canvas — read-only shell for now, see Roadmap) |
 | `GET` | `/runs` | `flow-admin.runs.index` | Runs list |
 | `GET` | `/runs/{id}` | `flow-admin.runs.show` | Run detail + timeline |
 | `GET` | `/approvals` | `flow-admin.approvals.index` | Approvals inbox |
@@ -369,8 +370,10 @@ HTTP request
    ├─► Adapters/Eloquent | Array       (ReadModel implementations)
    │       └─► reads flow_* tables (via core's Dashboard\FlowDashboardReadModel) OR seed-42 fixtures
    │
-   └─► resources/views/* + Alpine stores + Vite bundle
+   └─► resources/views/* + Alpine stores + Vite bundle (Blade/Alpine pages) or a React island (Studio)
 ```
+
+The Blade/Alpine pages (Overview, Runs, Approvals, Outbox, Definitions, Settings) are server-rendered with a small inline-script layer. Flow Studio (`/studio`) is a React island instead: `resources/js/studio.jsx` builds via Vite (`@vitejs/plugin-react` + `@xyflow/react`) into a hashed bundle, mounted at `#flow-studio-root`. The built JS/CSS are served through package-internal routes (`_flow-admin/assets/studio.js` / `.css`) that resolve the current filename via `.vite/manifest.json`, rather than a `<script>` tag pointing at `public_path()` directly — Testbench's dev server can't expose this package's own `public/vendor/flow-admin/` build output through ITS public dir, so a manifest-resolving controller (mirroring the existing CSS asset route) is the only path that works identically in local dev, Playwright E2E, and a real consumer app.
 
 Design source-of-truth for the existing runs/approvals/outbox panel lives under `.design-source/project/` (pixel reference) and is enforced through Playwright visual regression on chromium / firefox / webkit. The Flow Studio UI (graph canvas, editor, live run monitor — Macro E, in progress) is being built against a separate template under `design/claude-design-template/`.
 
@@ -421,13 +424,13 @@ Every push runs through this gate (matrix `php: 8.3, 8.4` × `laravel: 13`):
 composer validate --strict --no-check-publish
 composer format:test          # Laravel Pint
 composer analyse              # PHPStan / Larastan level 8
-composer test                 # PHPUnit — 111 tests, 606 assertions
+composer test                 # PHPUnit — 111 tests, 626 assertions
 npm run lint                  # ESLint flat config
 npm run build                 # Vite build verification
 npm run test:e2e              # Playwright on chromium + firefox + webkit
 ```
 
-Latest local run: **111 tests / 606 assertions / 21 E2E runs passed** (7 Playwright scenarios × 3 browsers).
+Latest local run: **111 tests / 626 assertions / 21 E2E runs passed** (8 Playwright scenarios × 3 browsers, 3 visual-gated skipped).
 
 ---
 
