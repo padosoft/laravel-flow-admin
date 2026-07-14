@@ -121,8 +121,12 @@ final readonly class EloquentReadModel implements ReadModel
         $total = count($filtered);
         $pageItems = array_slice($filtered, $this->offset($page, $perPage), $perPage);
 
+        // Batch step counts for the whole page in ONE query instead of one
+        // findRun() (5 queries + full run-detail hydration) per row.
+        $stepCounts = $this->reader->stepCounts(array_map(static fn (DashboardRunSummary $run): string => $run->id, $pageItems));
+
         $mapped = array_map(
-            fn (DashboardRunSummary $run): RunSummary => $this->mapRunSummary($run, $this->stepCount($run->id)),
+            fn (DashboardRunSummary $run): RunSummary => $this->mapRunSummary($run, $stepCounts[$run->id] ?? 0),
             $pageItems,
         );
 
@@ -432,13 +436,6 @@ final readonly class EloquentReadModel implements ReadModel
             'avg' => (int) round(array_sum($durations) / count($durations)),
             'p95' => $this->percentile($durations, 95),
         ];
-    }
-
-    private function stepCount(string $runId): int
-    {
-        $detail = $this->reader->findRun($runId);
-
-        return $detail instanceof DashboardRunDetail ? count($detail->steps) : 0;
     }
 
     /**

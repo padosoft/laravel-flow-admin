@@ -117,6 +117,42 @@ final class EloquentReadModelTest extends TestCase
         $this->assertSame('run-aborted', $search->items[0]->id);
     }
 
+    public function test_list_runs_batches_step_counts_in_one_query_not_per_row(): void
+    {
+        // Regression: listRuns() previously called findRun() (5 queries +
+        // full run-detail hydration) once PER ROW to populate stepCount —
+        // an N+1 caught by local Copilot review. It must now batch every
+        // row's step count via one FlowDashboardReadModel::stepCounts()
+        // call regardless of page size.
+        for ($i = 0; $i < 5; $i++) {
+            $runId = $this->seedRun([
+                'id' => sprintf('run-batch-%d', $i),
+                'status' => FlowRun::STATUS_SUCCEEDED,
+                'started_at' => $this->tsMinutesAgo($i),
+            ]);
+            $this->seedStep($runId, [
+                'id' => 900 + $i,
+                'sequence' => 1,
+                'step_name' => 'only',
+                'status' => 'succeeded',
+                'started_at' => $this->tsMinutesAgo($i),
+            ]);
+        }
+
+        DB::connection()->enableQueryLog();
+
+        $result = $this->makeModel()->listRuns(null, null, null, 1, 25);
+
+        $queries = DB::connection()->getQueryLog();
+        DB::connection()->flushQueryLog();
+
+        $this->assertCount(5, $result->items);
+        foreach ($result->items as $item) {
+            $this->assertSame(1, $item->stepCount);
+        }
+        $this->assertLessThan(10, count($queries), 'listRuns() must batch step counts in one query, not one findRun() call per row.');
+    }
+
     public function test_list_runs_echoes_out_of_range_page_with_empty_items(): void
     {
         // Matches ArrayReadModel's semantics (and this adapter's pre-rewrite
