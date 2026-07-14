@@ -14,9 +14,11 @@ use Padosoft\LaravelFlow\Dashboard\FlowDashboardReadModel;
 use Padosoft\LaravelFlow\FlowRun;
 use Padosoft\LaravelFlow\Graph\GraphDefinition;
 use Padosoft\LaravelFlow\Graph\GraphNode;
+use Padosoft\LaravelFlow\Graph\StoredDefinition;
 use Padosoft\LaravelFlowAdmin\Adapters\EloquentReadModel;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\KpiSummary;
 use Padosoft\LaravelFlowAdmin\Tests\TestCase;
+use RuntimeException;
 
 final class EloquentReadModelTest extends TestCase
 {
@@ -113,6 +115,21 @@ final class EloquentReadModelTest extends TestCase
         $search = $model->listRuns(null, null, 'search-key');
         $this->assertSame(1, $search->total);
         $this->assertSame('run-aborted', $search->items[0]->id);
+    }
+
+    public function test_list_runs_echoes_out_of_range_page_with_empty_items(): void
+    {
+        // Matches ArrayReadModel's semantics (and this adapter's pre-rewrite
+        // behavior): an out-of-range page is echoed back as-is with an
+        // empty item set, it is NOT silently clamped to the last valid
+        // page — the two ReadModel implementations must agree on this.
+        $this->seedRun(['id' => 'run-only']);
+
+        $result = $this->makeModel()->listRuns(null, null, null, 999, 25);
+
+        $this->assertSame(1, $result->total);
+        $this->assertSame(999, $result->page);
+        $this->assertCount(0, $result->items);
     }
 
     public function test_find_run_includes_steps_and_audit_from_flow_dashboard_read_model(): void
@@ -366,6 +383,70 @@ final class EloquentReadModelTest extends TestCase
 
         $this->assertNotNull($checkout);
         $this->assertSame(3, $checkout->stepCount);
+    }
+
+    public function test_definitions_degrades_to_zero_step_count_when_definition_repository_throws(): void
+    {
+        // DefinitionRepository::latest() can throw (signature verification
+        // failure, connection issues) for a single misconfigured row — that
+        // must not 500 the whole definitions list.
+        $this->seedRun([
+            'id' => 'run-def-throws',
+            'status' => FlowRun::STATUS_SUCCEEDED,
+            'definition_name' => 'flaky:1',
+        ]);
+
+        $throwingDefinitions = new class implements DefinitionRepository
+        {
+            public function createDraft(string $name, GraphDefinition $graph): StoredDefinition
+            {
+                throw new RuntimeException('not used by this test');
+            }
+
+            public function createDraftIfChanged(string $name, GraphDefinition $graph): ?StoredDefinition
+            {
+                throw new RuntimeException('not used by this test');
+            }
+
+            public function find(string $name, int $version): StoredDefinition
+            {
+                throw new RuntimeException('not used by this test');
+            }
+
+            public function latest(string $name, ?string $status = null): ?StoredDefinition
+            {
+                throw new RuntimeException('definitions table unavailable');
+            }
+
+            public function publish(string $name, int $version): StoredDefinition
+            {
+                throw new RuntimeException('not used by this test');
+            }
+
+            public function archive(string $name, int $version): StoredDefinition
+            {
+                throw new RuntimeException('not used by this test');
+            }
+
+            public function versions(string $name): array
+            {
+                throw new RuntimeException('not used by this test');
+            }
+        };
+
+        $model = new EloquentReadModel($this->app->make(FlowDashboardReadModel::class), $throwingDefinitions);
+
+        $definitions = $model->definitions();
+
+        $flaky = null;
+        foreach ($definitions as $definition) {
+            if ($definition->name === 'flaky') {
+                $flaky = $definition;
+            }
+        }
+
+        $this->assertNotNull($flaky);
+        $this->assertSame(0, $flaky->stepCount);
     }
 
     public function test_recent_batch_cap_bounds_list_runs_to_most_recent_window(): void

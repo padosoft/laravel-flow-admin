@@ -30,6 +30,7 @@ use Padosoft\LaravelFlowAdmin\Contracts\Dto\Step;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ThroughputBucket;
 use Padosoft\LaravelFlowAdmin\Contracts\PaginatedResult;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
+use Throwable;
 
 /**
  * Routes every read exclusively through core's `@api` `FlowDashboardReadModel`
@@ -118,7 +119,6 @@ final readonly class EloquentReadModel implements ReadModel
         ));
 
         $total = count($filtered);
-        $page = $this->pageInBounds($page, $perPage, $total);
         $pageItems = array_slice($filtered, $this->offset($page, $perPage), $perPage);
 
         $mapped = array_map(
@@ -164,7 +164,6 @@ final readonly class EloquentReadModel implements ReadModel
             : array_values(array_filter($candidates, fn (DashboardApprovalSummary $a): bool => $this->approvalMatchesSearch($a, $search)));
 
         $total = count($filtered);
-        $page = $this->pageInBounds($page, $perPage, $total);
         $pageItems = array_slice($filtered, $this->offset($page, $perPage), $perPage);
 
         return new PaginatedResult(
@@ -199,7 +198,6 @@ final readonly class EloquentReadModel implements ReadModel
         // `FlowDashboardReadModel::listWebhookOutbox()` already orders by
         // `orderByDesc('id')` (newest first) — no re-reversal needed here.
         $total = count($filtered);
-        $page = $this->pageInBounds($page, $perPage, $total);
         $pageItems = array_slice($filtered, $this->offset($page, $perPage), $perPage);
 
         return new PaginatedResult(
@@ -334,10 +332,20 @@ final readonly class EloquentReadModel implements ReadModel
      * reproduce. Reads `$stored->graph['nodes']` directly rather than
      * fully deserializing into a `GraphDefinition` — this method only
      * needs a count, not an executable graph.
+     *
+     * `DefinitionRepository::latest()` can throw (signature verification
+     * failure, connection issues) for a single misconfigured/corrupted
+     * definition row; one bad row must not 500 the whole definitions list,
+     * so this degrades to 0 on failure — same defensive pattern as
+     * `OverviewController::safe()`.
      */
     private function declaredStepCount(string $name): int
     {
-        $stored = $this->definitions->latest($name);
+        try {
+            $stored = $this->definitions->latest($name);
+        } catch (Throwable) {
+            return 0;
+        }
 
         if ($stored === null) {
             return 0;
@@ -702,17 +710,6 @@ final readonly class EloquentReadModel implements ReadModel
     private function normalizeLimit(int $limit): int
     {
         return $limit > 0 ? min(200, $limit) : 25;
-    }
-
-    private function pageInBounds(int $page, int $perPage, int $total): int
-    {
-        if ($total === 0) {
-            return 1;
-        }
-
-        $maxPage = (int) ceil($total / $perPage);
-
-        return min($page, max(1, $maxPage));
     }
 
     private function offset(int $page, int $perPage): int
