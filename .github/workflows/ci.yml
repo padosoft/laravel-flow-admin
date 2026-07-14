@@ -138,6 +138,19 @@ jobs:
         if: steps.pkg.outputs.present == 'true'
         run: npm run build --if-present
 
+      # Built once here, shared with all 3 e2e browser-matrix legs via
+      # actions/download-artifact — each matrix leg is a fully separate
+      # runner/checkout, so without this every leg would run its own
+      # `npm run build` (same Vite input, same output, 3x the compute
+      # for zero difference in result).
+      - name: Upload built assets for e2e reuse
+        if: steps.pkg.outputs.present == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: flow-admin-built-assets
+          path: public/vendor/flow-admin/
+          retention-days: 1
+
       - name: Frontend gate skipped (no package.json yet)
         if: steps.pkg.outputs.present != 'true'
         run: echo "package.json not present yet — Macro 2 will introduce it."
@@ -232,12 +245,23 @@ jobs:
         if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
-      # `npm run build` here (once per matrix job) instead of via
-      # `npm run test:e2e`'s own build-first step (used for local dev
-      # convenience) — this job runs once PER BROWSER, so going through
-      # the npm script would rebuild identically 3x per CI run.
-      - name: Build assets
+      # Reuse the SAME build the `frontend` job already produced and
+      # uploaded, instead of every matrix leg (chromium/firefox/webkit —
+      # 3 fully separate runners) rebuilding the identical output. Falls
+      # back to a real local build if the artifact is missing (e.g. the
+      # `frontend` job's build step was itself skipped) so this job never
+      # silently runs against a stale/absent bundle.
+      - name: Download built assets from the frontend job
         if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
+        id: download-assets
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: flow-admin-built-assets
+          path: public/vendor/flow-admin/
+
+      - name: Build assets (fallback — artifact download failed or was skipped)
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true' && steps.download-assets.outcome != 'success'
         run: npm run build
 
       - name: Run Playwright (${{ matrix.browser }})

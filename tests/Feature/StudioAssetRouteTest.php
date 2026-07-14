@@ -32,10 +32,21 @@ final class StudioAssetRouteTest extends TestCase
 
         $this->buildDir = dirname(__DIR__, 2) . '/public/vendor/flow-admin';
 
-        if (is_dir($this->buildDir)) {
-            $this->backupDir = $this->buildDir . '.phpunit-backup-' . getmypid();
-            rename($this->buildDir, $this->backupDir);
+        if (! is_dir($this->buildDir)) {
+            return;
         }
+
+        $backupDir = $this->buildDir . '.phpunit-backup-' . getmypid() . '-' . uniqid('', true);
+
+        if (is_dir($backupDir)) {
+            throw new \RuntimeException("Stale backup directory already exists: {$backupDir}");
+        }
+
+        if (! rename($this->buildDir, $backupDir)) {
+            throw new \RuntimeException("Failed to back up {$this->buildDir} to {$backupDir} — refusing to risk the real build.");
+        }
+
+        $this->backupDir = $backupDir;
     }
 
     protected function tearDown(): void
@@ -44,8 +55,8 @@ final class StudioAssetRouteTest extends TestCase
             $this->deleteDirectory($this->buildDir);
         }
 
-        if ($this->backupDir !== null) {
-            rename($this->backupDir, $this->buildDir);
+        if ($this->backupDir !== null && ! rename($this->backupDir, $this->buildDir)) {
+            throw new \RuntimeException("Failed to restore the real build from {$this->backupDir} to {$this->buildDir} — it is still there, restore it manually.");
         }
 
         parent::tearDown();
