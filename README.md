@@ -9,7 +9,7 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![PHP Version](https://img.shields.io/packagist/php-v/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![Laravel](https://img.shields.io/badge/Laravel-%5E13.0-ff2d20?style=flat-square&logo=laravel)](https://laravel.com)
-[![Tests](https://img.shields.io/badge/tests-147%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
+[![Tests](https://img.shields.io/badge/tests-155%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![E2E](https://img.shields.io/badge/playwright-chromium%20%7C%20firefox%20%7C%20webkit-45ba4b?style=flat-square&logo=playwright)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%208-brightgreen?style=flat-square)](https://phpstan.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-pint-7e22ce?style=flat-square)](https://laravel.com/docs/pint)
@@ -76,12 +76,13 @@
 - 📤 **Webhook outbox** — delivery state, replay failed jobs, inspect headers/payloads.
 - 📋 **Flow definitions** — registered workflows, version, last activity at a glance.
 - 🧩 **Flow Studio canvas** — React + `@xyflow/react` visual graph: read-only view of a flow's published version, plus a full drag-and-drop editor (palette from the node catalog, typed-connection validation, node inspector, save-as-draft) gated by your `ActionAuthorizer`.
+- 🗂️ **Flow versioning** — every stored version listed with its draft/published/archived status, one-click **Publish** behind an immutability confirmation (core re-validates on publish), and a node-level **visual diff** between any two versions (added glows green, removed red-dashed, changed amber) computed server-side so no node `config` ever leaves the server.
 - ⚡ **⌘K command palette** — jump anywhere in two keystrokes.
 - 🎨 **Pixel-perfect dark + light themes** — persisted in cookie, switchable per user.
 - 🛡️ **Deny-by-default authorizer** — every mutation goes through your `ActionAuthorizer`. No accidents.
 - 🔁 **Auto-refreshing pages** — configurable polling (`/flow/api/live`).
 - 🧱 **Adapter pattern** — `eloquent` for prod, `array` for demos / E2E (deterministic seed-42 fixtures).
-- 🧪 **Battle-tested** — 147 PHPUnit tests, 17 Playwright scenarios (51 runs across Chromium / Firefox / WebKit — 45 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario).
+- 🧪 **Battle-tested** — 155 PHPUnit tests, 21 Playwright scenarios (63 runs across Chromium / Firefox / WebKit — 57 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario).
 - 📦 **Zero-coupling** — built on a public `Contracts\*` surface; engine internals stay `@internal`.
 
 ---
@@ -278,9 +279,9 @@ All keys live in `config/flow-admin.php`. They are also overridable via environm
 
 ## 🔒 Authorization (mutations)
 
-Every mutation route (resume, reject, replay, cancel, retry-webhook, Studio's edit-graph load and draft save) consults your `ActionAuthorizer` **before** the controller runs. This is non-negotiable: there is no "global admin" bypass and no way to short-circuit the gate from a Blade view.
+Every mutation route (resume, reject, replay, cancel, retry-webhook, Studio's edit-graph load, draft save and publish) consults your `ActionAuthorizer` **before** the controller runs. This is non-negotiable: there is no "global admin" bypass and no way to short-circuit the gate from a Blade view.
 
-`ActionAuthorizer::canEditDefinition()` gates two Studio editor routes: loading a flow's UNREDACTED graph (`GET /studio/{name}/edit-graph`, node `config` included — unlike the read-only canvas's `graph()` endpoint, which redacts it) and saving an edited graph as a new draft (`POST /studio/{name}/draft`). The default `DenyAllAuthorizer` denies both; ship your own `ActionAuthorizer` (or set `FLOW_ADMIN_AUTHORIZER=allow` for local dev/E2E — see `AllowAllAuthorizer`, dev-only, never production) to enable Studio editing.
+`ActionAuthorizer::canEditDefinition()` gates the Studio authoring routes: loading a flow's UNREDACTED graph (`GET /studio/{name}/edit-graph`, node `config` included — unlike the read-only canvas's `graph()` endpoint, which redacts it), saving an edited graph as a new draft (`POST /studio/{name}/draft`), and publishing a draft version (`POST /studio/{name}/publish`). The default `DenyAllAuthorizer` denies them all; ship your own `ActionAuthorizer` (or set `FLOW_ADMIN_AUTHORIZER=allow` for local dev/E2E — see `AllowAllAuthorizer`, dev-only, never production) to enable Studio editing. The version-list and diff read endpoints (`GET /studio/{name}/version-list`, `GET /studio/{name}/diff`) carry no node `config` and so sit at the same visibility level as the read-only `graph()` endpoint.
 
 `GET /studio/catalog` (the editor palette's node-type catalog) is deliberately **not** gated by `canEditDefinition()` — it returns node-type metadata only (names, categories, port shapes), never a flow's `config`, so it's reachable by any request that clears the base `flow-admin.middleware` stack (typically `web,auth`). If your node-type names/descriptions are themselves sensitive, gate this route yourself (e.g. wrap it in additional middleware) before exposing Studio.
 
@@ -435,13 +436,13 @@ Every push runs through this gate (matrix `php: 8.3, 8.4` × `laravel: 13`):
 composer validate --strict --no-check-publish
 composer format:test          # Laravel Pint
 composer analyse              # PHPStan / Larastan level 8
-composer test                 # PHPUnit — 147 tests, 769 assertions
+composer test                 # PHPUnit — 155 tests, 804 assertions
 npm run lint                  # ESLint flat config
 npm run build                 # Vite build verification
 npm run test:e2e              # Playwright on chromium + firefox + webkit
 ```
 
-Latest local run: **147 tests / 769 assertions / 45 E2E runs passed** (17 Playwright scenarios × 3 browsers, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser limitations on one node-deletion scenario).
+Latest local run: **155 tests / 804 assertions / 57 E2E runs passed** (21 Playwright scenarios × 3 browsers, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser limitations on one node-deletion scenario).
 
 ---
 

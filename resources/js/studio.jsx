@@ -792,15 +792,320 @@ function StudioEditor(props) {
   );
 }
 
+// E-PR4 visual-diff palette — added glows green, removed is red-dashed,
+// changed is amber, unchanged keeps the default border (mirrors the design
+// brief's diff-overlay styles).
+const DIFF_COLORS = {
+  added: '#10b981',
+  removed: '#ef4444',
+  changed: '#f59e0b',
+  unchanged: 'var(--border, #333)',
+};
+
+function diffGraphToFlowElements(graph, catalog) {
+  const nodes = (graph.nodes ?? []).map((node, index) => {
+    const entry = catalog[node.type];
+    const state = node.diff_state ?? 'unchanged';
+    const color = DIFF_COLORS[state] ?? DIFF_COLORS.unchanged;
+    const removed = state === 'removed';
+
+    return {
+      id: node.id,
+      position: node.position ?? { x: index * 220, y: 0 },
+      data: { label: entry?.name ?? node.type },
+      style: {
+        border: `2px ${removed ? 'dashed' : 'solid'} ${color}`,
+        borderRadius: 8,
+        padding: '8px 12px',
+        background: 'var(--bg-elevated, #1a1a1a)',
+        color: 'var(--text, #eee)',
+        fontSize: 13,
+        opacity: removed ? 0.6 : 1,
+      },
+      // React Flow's default node renderer applies `className` to the node
+      // wrapper (arbitrary top-level keys like a `data-*` attr are dropped),
+      // so this is the honored way to expose the diff state to CSS/tests.
+      className: `diff-node-${state}`,
+    };
+  });
+
+  const edges = (graph.connections ?? []).map((wire, index) => {
+    const state = wire.diff_state ?? 'unchanged';
+    const color = DIFF_COLORS[state] ?? DIFF_COLORS.unchanged;
+    const removed = state === 'removed';
+
+    return {
+      id: `${wire.sourceNodeId}.${wire.sourcePortKey}->${wire.targetNodeId}.${wire.targetPortKey}-${index}`,
+      source: wire.sourceNodeId,
+      target: wire.targetNodeId,
+      style: { stroke: color, strokeWidth: 2, ...(removed ? { strokeDasharray: '5 4' } : {}) },
+      markerEnd: { type: MarkerType.ArrowClosed, color },
+    };
+  });
+
+  return { nodes, edges };
+}
+
+function StudioVersions({ versionListUrl, diffUrl, publishUrl, catalogUrl, editUrl }) {
+  const [state, setState] = useState({ status: 'loading', versions: [], catalog: {} });
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [diff, setDiff] = useState(null);
+  const [publishTarget, setPublishTarget] = useState(null);
+  const [publishing, setPublishing] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  const fetchVersions = useCallback(async () => {
+    const [versionsResponse, catalogResponse] = await Promise.all([
+      fetch(versionListUrl, { headers: { Accept: 'application/json' } }),
+      fetch(catalogUrl, { headers: { Accept: 'application/json' } }),
+    ]);
+
+    if (!versionsResponse.ok || !catalogResponse.ok) {
+      throw new Error('Unexpected response');
+    }
+
+    const versionsBody = await versionsResponse.json();
+    const catalogBody = await catalogResponse.json();
+
+    return { versions: versionsBody.versions ?? [], catalog: catalogBody.catalog ?? {} };
+  }, [versionListUrl, catalogUrl]);
+
+  const applyLoaded = useCallback(({ versions, catalog }) => {
+    setState({ status: 'ready', versions, catalog });
+
+    // Default the diff selectors to the two newest versions.
+    if (versions.length >= 2) {
+      setTo((current) => current || String(versions[0].version));
+      setFrom((current) => current || String(versions[1].version));
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchVersions()
+      .then((data) => {
+        if (!cancelled) applyLoaded(data);
+      })
+      .catch(() => {
+        if (!cancelled) setState({ status: 'error', versions: [], catalog: {} });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchVersions, applyLoaded]);
+
+  const compare = useCallback(async () => {
+    if (!from || !to) return;
+
+    setDiff({ status: 'loading' });
+    try {
+      const response = await fetch(`${diffUrl}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
+        headers: { Accept: 'application/json' },
+      });
+      const body = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setDiff({ status: 'error', message: body.message ?? 'Could not compute the diff.' });
+
+        return;
+      }
+
+      setDiff({ status: 'ready', summary: body.summary, graph: body.graph });
+    } catch {
+      setDiff({ status: 'error', message: 'Could not compute the diff.' });
+    }
+  }, [diffUrl, from, to]);
+
+  const doPublish = useCallback(async (version) => {
+    setPublishing(true);
+    try {
+      const response = await fetch(publishUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+        body: JSON.stringify({ version }),
+      });
+      const body = await response.json().catch(() => ({}));
+
+      if (response.ok && body.success) {
+        setMessage({ kind: 'success', text: body.message ?? `Version ${version} published.` });
+        const data = await fetchVersions();
+        applyLoaded(data);
+      } else {
+        setMessage({ kind: 'error', text: body.message ?? 'Could not publish.' });
+      }
+    } catch {
+      setMessage({ kind: 'error', text: 'Could not publish. Try again.' });
+    } finally {
+      setPublishing(false);
+      setPublishTarget(null);
+    }
+  }, [publishUrl, fetchVersions, applyLoaded]);
+
+  if (state.status === 'loading') {
+    return <div className="empty" data-testid="studio-versions-loading">Loading versions…</div>;
+  }
+
+  if (state.status === 'error') {
+    return <div className="empty" data-testid="studio-versions-error">Could not load versions. Try reloading the page.</div>;
+  }
+
+  const diffElements = diff?.status === 'ready' ? diffGraphToFlowElements(diff.graph, state.catalog) : null;
+
+  return (
+    <div data-testid="flow-studio-versions" style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
+      {message ? (
+        <div
+          data-testid={message.kind === 'success' ? 'publish-success' : 'publish-error'}
+          role="status"
+          style={{
+            padding: '8px 12px',
+            borderRadius: 8,
+            fontSize: 13,
+            border: `1px solid ${message.kind === 'success' ? '#10b981' : '#ef4444'}`,
+            color: message.kind === 'success' ? '#10b981' : '#ef4444',
+          }}
+        >
+          {message.text}
+        </div>
+      ) : null}
+
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 320px', minWidth: 280 }}>
+          <h2 style={{ fontSize: 14, margin: '0 0 8px' }}>Versions</h2>
+          {state.versions.length === 0 ? (
+            <div className="empty" data-testid="studio-versions-empty">No versions yet — save a draft in the editor first.</div>
+          ) : (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {state.versions.map((v) => (
+                <li
+                  key={v.version}
+                  data-testid={`version-row-${v.version}`}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                    padding: '8px 12px', border: '1px solid var(--border, #333)', borderRadius: 8,
+                  }}
+                >
+                  <span>
+                    <b>v{v.version}</b>
+                    {' · '}
+                    <span data-testid={`version-status-${v.version}`}>{v.status}</span>
+                    {v.published_at ? <span style={{ color: 'var(--text-secondary, #999)' }}>{' · '}{v.published_at.slice(0, 10)}</span> : null}
+                  </span>
+                  {v.status === 'draft' ? (
+                    <button
+                      type="button"
+                      className="btn primary"
+                      data-testid={`publish-btn-${v.version}`}
+                      onClick={() => setPublishTarget(v.version)}
+                    >
+                      Publish
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {editUrl ? (
+            <a href={editUrl} data-testid="versions-edit-link" style={{ display: 'inline-block', marginTop: 10, fontSize: 13 }}>
+              ← Back to editor
+            </a>
+          ) : null}
+        </div>
+
+        <div style={{ flex: '2 1 480px', minWidth: 360 }}>
+          <h2 style={{ fontSize: 14, margin: '0 0 8px' }}>Compare versions</h2>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+            <select data-testid="diff-from-select" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From version">
+              <option value="">from…</option>
+              {state.versions.map((v) => <option key={v.version} value={v.version}>v{v.version}</option>)}
+            </select>
+            <span>→</span>
+            <select data-testid="diff-to-select" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To version">
+              <option value="">to…</option>
+              {state.versions.map((v) => <option key={v.version} value={v.version}>v{v.version}</option>)}
+            </select>
+            <button type="button" className="btn" data-testid="diff-compare-btn" onClick={compare} disabled={!from || !to}>
+              Compare
+            </button>
+          </div>
+
+          {diff?.status === 'error' ? (
+            <div className="empty" data-testid="diff-error">{diff.message}</div>
+          ) : null}
+
+          {diff?.status === 'ready' ? (
+            <>
+              <div data-testid="diff-summary" style={{ display: 'flex', gap: 12, fontSize: 13, marginBottom: 8 }}>
+                <span data-testid="diff-added-count" style={{ color: DIFF_COLORS.added }}>+{diff.summary.added} added</span>
+                <span data-testid="diff-removed-count" style={{ color: DIFF_COLORS.removed }}>−{diff.summary.removed} removed</span>
+                <span data-testid="diff-changed-count" style={{ color: DIFF_COLORS.changed }}>~{diff.summary.changed} changed</span>
+              </div>
+              <div data-testid="diff-canvas" style={{ width: '100%', height: 380, border: '1px solid var(--border, #333)', borderRadius: 8 }}>
+                <ReactFlowProvider>
+                  <ReactFlow nodes={diffElements.nodes} edges={diffElements.edges} fitView proOptions={{ hideAttribution: true }}>
+                    <Background />
+                    <Controls showInteractive={false} />
+                  </ReactFlow>
+                </ReactFlowProvider>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      {publishTarget !== null ? (
+        <div
+          data-testid="publish-modal"
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed', inset: 0, background: 'var(--bg-overlay, rgba(0,0,0,0.6))',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
+          }}
+        >
+          <div style={{ background: 'var(--bg-elevated, #1a1a1a)', color: 'var(--text, #eee)', borderRadius: 12, padding: 20, maxWidth: 420, border: '1px solid var(--border, #333)' }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: 16 }}>Publish v{publishTarget}?</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary, #999)', margin: '0 0 16px' }}>
+              Published versions are <b style={{ color: 'var(--text, #eee)' }}>immutable</b> and become runnable. Running instances keep their pinned version. Create a new draft to make further changes.
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn" data-testid="publish-cancel-btn" onClick={() => setPublishTarget(null)} disabled={publishing}>
+                Cancel
+              </button>
+              <button type="button" className="btn primary" data-testid="publish-confirm-btn" onClick={() => doPublish(publishTarget)} disabled={publishing}>
+                {publishing ? 'Publishing…' : `Publish v${publishTarget}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const mountPoint = document.getElementById('flow-studio-root');
 
 if (mountPoint) {
-  const { mode, graphUrl, flowName, editGraphUrl, catalogUrl, draftUrl } = mountPoint.dataset;
+  const {
+    mode, graphUrl, flowName, editGraphUrl, catalogUrl, draftUrl,
+    versionListUrl, diffUrl, publishUrl, editUrl,
+  } = mountPoint.dataset;
 
   createRoot(mountPoint).render(
     <StrictMode>
       {mode === 'edit' ? (
         <StudioEditor flowName={flowName} editGraphUrl={editGraphUrl} catalogUrl={catalogUrl} draftUrl={draftUrl} />
+      ) : mode === 'versions' ? (
+        <StudioVersions
+          versionListUrl={versionListUrl}
+          diffUrl={diffUrl}
+          publishUrl={publishUrl}
+          catalogUrl={catalogUrl}
+          editUrl={editUrl}
+        />
       ) : graphUrl ? (
         <StudioCanvas graphUrl={graphUrl} />
       ) : null}

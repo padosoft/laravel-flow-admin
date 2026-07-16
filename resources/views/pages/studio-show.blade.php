@@ -11,9 +11,14 @@
                 <h1 class="page-title">{{ $flowName }}</h1>
                 <p class="page-sub">Read-only canvas — the published graph.</p>
             </div>
-            <a href="{{ route('flow-admin.studio.edit', ['name' => $flowName]) }}" class="btn" data-testid="studio-edit-link">
-                Edit
-            </a>
+            <div style="display: flex; gap: 8px;">
+                <a href="{{ route('flow-admin.studio.versions', ['name' => $flowName]) }}" class="btn" data-testid="studio-versions-link">
+                    Versions
+                </a>
+                <a href="{{ route('flow-admin.studio.edit', ['name' => $flowName]) }}" class="btn" data-testid="studio-edit-link">
+                    Edit
+                </a>
+            </div>
         </div>
 
         <div
