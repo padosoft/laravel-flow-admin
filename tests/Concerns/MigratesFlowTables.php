@@ -19,8 +19,17 @@ trait MigratesFlowTables
 
     private function setUpFlowDatabase(): void
     {
-        $this->flowDatabasePath = tempnam(sys_get_temp_dir(), 'lfa-flow-db-') . '.sqlite';
-        touch($this->flowDatabasePath);
+        // tempnam() already creates the file and returns its path; SQLite
+        // does not require a `.sqlite` extension, so use the path as-is
+        // instead of appending one and touch()ing a second file (which
+        // would orphan the original temp file every run).
+        $path = tempnam(sys_get_temp_dir(), 'lfa-flow-db-');
+
+        if ($path === false) {
+            $this->fail('Unable to create a temporary SQLite database file for the flow tables.');
+        }
+
+        $this->flowDatabasePath = $path;
 
         $this->app['config']->set('database.default', 'sqlite');
         $this->app['config']->set('database.connections.sqlite.database', $this->flowDatabasePath);

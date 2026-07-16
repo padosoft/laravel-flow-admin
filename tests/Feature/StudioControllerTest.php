@@ -26,6 +26,19 @@ final class StudioControllerTest extends TestCase
 {
     use MigratesFlowTables;
 
+    /**
+     * Guaranteed cleanup even when a test that called setUpFlowDatabase()
+     * fails or throws before reaching its own teardown. tearDownFlowDatabase()
+     * is a no-op for the tests here that never set up the flow database
+     * (guarded on $flowDatabasePath being set).
+     */
+    protected function tearDown(): void
+    {
+        $this->tearDownFlowDatabase();
+
+        parent::tearDown();
+    }
+
     public function test_studio_show_and_graph_routes_are_registered_in_the_configured_middleware_group(): void
     {
         $configuredMiddleware = config('flow-admin.middleware', ['web', 'auth']);
@@ -185,8 +198,6 @@ final class StudioControllerTest extends TestCase
         $stored = $this->app->make(DefinitionRepository::class)->latest('studio-controller-save-flow');
         $this->assertNotNull($stored);
         $this->assertSame(StoredDefinition::STATUS_DRAFT, $stored->status);
-
-        $this->tearDownFlowDatabase();
     }
 
     private function bindAllowingAuthorizer(): void

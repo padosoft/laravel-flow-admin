@@ -121,6 +121,32 @@ if (migration.status !== 0) {
   process.exit(migration.status ?? 1);
 }
 
+// Put the freshly migrated file into WAL journal mode BEFORE the server
+// starts, so the Studio "save as draft" write can't collide with the
+// concurrent `/flow/api/live` poll read on SQLite's default whole-file
+// journal lock (which failed fast — "database is locked" — under CI's PHP
+// built-in server, surfacing as an intermittent `500 Could not save the
+// draft`). WAL is persisted in the file header, so every per-request
+// connection the served app opens inherits it. See scripts/enable-wal.php.
+const walScript = resolve(here, 'enable-wal.php');
+const wal =
+  process.platform === 'win32'
+    ? spawnSync(
+        'cmd.exe',
+        ['/d', '/s', '/c', `php "${walScript}" "${e2eDatabasePath}"`],
+        { cwd: repoRoot, stdio: 'inherit', env, windowsVerbatimArguments: true },
+      )
+    : spawnSync('php', [walScript, e2eDatabasePath], { cwd: repoRoot, stdio: 'inherit', env });
+
+if (wal.status !== 0) {
+  console.error(
+    `[serve-testbench] Enabling WAL journal mode on ${e2eDatabasePath} failed ` +
+      `(exit ${wal.status}). Aborting: the save-as-draft E2E scenario is prone to ` +
+      'intermittent SQLite "database is locked" 500s without it.',
+  );
+  process.exit(wal.status ?? 1);
+}
+
 let child;
 if (process.platform === 'win32') {
   // Quote the testbench path so spaces (e.g. "Visual Basic") survive.

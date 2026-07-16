@@ -281,6 +281,21 @@ jobs:
           FLOW_ADMIN_ADAPTER: array
         run: npx playwright test --project=${{ matrix.browser }}
 
+      # The served testbench app's exceptions (e.g. a save-as-draft failure
+      # caught in StudioController::storeDraft and logged, not returned) land
+      # in Laravel's log, NOT in the Playwright/webServer stdout — so a server
+      # 500 behind an E2E failure is otherwise invisible in CI. Surface it.
+      - name: Dump testbench application log on failure
+        if: failure() && steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
+        run: |
+          LOG="vendor/orchestra/testbench-core/laravel/storage/logs/laravel.log"
+          if [ -f "$LOG" ]; then
+            echo "===== $LOG (tail) ====="
+            tail -n 200 "$LOG"
+          else
+            echo "No testbench application log at $LOG."
+          fi
+
       - name: Upload Playwright report
         if: failure() && steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         uses: actions/upload-artifact@v7
