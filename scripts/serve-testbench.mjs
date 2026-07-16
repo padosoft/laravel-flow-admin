@@ -42,14 +42,30 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
 const testbench = resolve(repoRoot, 'vendor/bin/testbench');
 
-// A real, persistent SQLite file (not `:memory:`, which PHP's built-in
-// dev server — a fresh process per request — would wipe between every
-// HTTP request) so E-PR3's Studio editor "save as draft" flow has a real
-// `flow_definitions` table to write into during Playwright E2E runs.
-// `storage/` is git-ignored package-wide; recreated fresh on every run
-// for a clean E2E state, same spirit as the `array` ReadModel adapter's
-// deterministic seed-42 fixtures for reads.
-const e2eDatabasePath = resolve(repoRoot, 'storage/testing/flow-admin-e2e.sqlite');
+// A real, persistent SQLite file (not `:memory:`, which the `testing`
+// connection uses and which cannot hold the migrated tables across the
+// served app's requests) so E-PR3's Studio editor "save as draft" flow has
+// a real `flow_definitions` table to write into during Playwright E2E runs.
+//
+// CRITICAL — this MUST be the testbench skeleton's OWN `database_path()`:
+// `testbench serve` runs `artisan serve`, which spawns the `php -S` worker
+// with its CWD set to `public_path()` of the skeleton (Laravel's
+// ServeCommand::startProcess: `new Process(cmd, public_path(), …)`) and does
+// NOT pass our `DB_DATABASE` env through to that worker (ServeCommand drops
+// every non-passthrough var). So a relative `DB_DATABASE` resolves against
+// the skeleton's dirs, not repo root, and an absolute one we set in the
+// process env never reaches the served app at all — the app instead falls
+// back to `env('DB_DATABASE', database_path('database.sqlite'))`. By writing
+// and migrating THIS exact file, both the migration process and the served
+// app (both boot the `@testbench` skeleton, so both compute the identical
+// absolute `database_path('database.sqlite')`) target the same file with no
+// relative-path, CWD, or env-inheritance dependency. Verified:
+// base_path() = vendor/orchestra/testbench-core/laravel. Recreated fresh on
+// every run for a clean E2E state.
+const e2eDatabasePath = resolve(
+  repoRoot,
+  'vendor/orchestra/testbench-core/laravel/database/database.sqlite',
+);
 
 // Single source of truth: when FLOW_ADMIN_E2E_BASE_URL is set, derive host
 // and port from it so the webServer Playwright polls (`url`) and the
