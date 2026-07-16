@@ -317,6 +317,11 @@ function editableGraphToFlowElements({ graph, catalog }) {
     };
   });
 
+  // Precompute nodeId → nodeType once so each edge resolves its endpoints'
+  // catalog entries in O(1) instead of scanning `nodes` twice per edge
+  // (O(E·N) overall, which grows noticeably on larger graphs).
+  const nodeTypeById = new Map(nodes.map((n) => [n.id, n.data.nodeType]));
+
   // Tracks non-`multiple` input ports already fed by an earlier wire in
   // this same list, so a loaded graph with a duplicate fan-in renders the
   // SECOND wire red exactly like drawing it interactively would (onConnect
@@ -324,8 +329,8 @@ function editableGraphToFlowElements({ graph, catalog }) {
   const wiredInputs = new Set();
 
   const edges = graph.connections.map((wire) => {
-    const sourceEntry = catalog[nodes.find((n) => n.id === wire.sourceNodeId)?.data.nodeType];
-    const targetEntry = catalog[nodes.find((n) => n.id === wire.targetNodeId)?.data.nodeType];
+    const sourceEntry = catalog[nodeTypeById.get(wire.sourceNodeId)];
+    const targetEntry = catalog[nodeTypeById.get(wire.targetNodeId)];
     const sourcePort = findPort(sourceEntry, 'outputs', wire.sourcePortKey);
     const targetPort = findPort(targetEntry, 'inputs', wire.targetPortKey);
     const targetKey = `${wire.targetNodeId}.${wire.targetPortKey}`;

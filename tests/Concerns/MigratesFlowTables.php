@@ -41,9 +41,15 @@ trait MigratesFlowTables
 
     private function tearDownFlowDatabase(): void
     {
+        // No-op for tests that never called setUpFlowDatabase() — don't
+        // disconnect a connection this trait never touched.
+        if (! isset($this->flowDatabasePath)) {
+            return;
+        }
+
         DB::disconnect('sqlite');
 
-        if (isset($this->flowDatabasePath) && file_exists($this->flowDatabasePath)) {
+        if (file_exists($this->flowDatabasePath)) {
             unlink($this->flowDatabasePath);
         }
     }

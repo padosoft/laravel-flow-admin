@@ -6,6 +6,10 @@ async function dragConnect(page, fromTestId, toTestId) {
   const fromBox = await from.boundingBox();
   const toBox = await to.boundingBox();
 
+  if (!fromBox || !toBox) {
+    throw new Error(`dragConnect: missing bounding box (from=${fromTestId} → to=${toTestId}); the handle may not be rendered/visible yet.`);
+  }
+
   await page.mouse.move(fromBox.x + fromBox.width / 2, fromBox.y + fromBox.height / 2);
   await page.mouse.down();
   await page.mouse.move(toBox.x + toBox.width / 2, toBox.y + toBox.height / 2, { steps: 12 });
@@ -157,7 +161,16 @@ test.describe('flow-admin studio editor (E-PR3 canvas editor)', () => {
     // path can overlap the node's clickable area (Firefox in particular),
     // which Playwright's actionability check otherwise treats as
     // "obscured"; onNodeClick still fires correctly underneath it.
-    await validateNode.click({ force: true });
+    //
+    // react-flow occasionally drops a single node click (it can land on a
+    // label/handle child or be swallowed by the canvas), leaving the
+    // inspector empty and the delete button unrendered — a ~1-in-3 flake.
+    // Retry the selection click until the inspector's delete button is
+    // actually present, so selection is deterministic rather than one-shot.
+    await expect(async () => {
+      await validateNode.click({ force: true });
+      await expect(page.getByTestId('studio-delete-node-button')).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 15000 });
     // Deleting a node now confirms first (window.confirm) — Playwright
     // auto-dismisses unhandled dialogs, which would make confirm() return
     // false and silently no-op the delete, so accept it explicitly.
