@@ -234,6 +234,12 @@ final class StudioController extends Controller
      */
     public function versionList(string $name): JsonResponse
     {
+        try {
+            $stored = $this->definitions->versions($name);
+        } catch (Throwable $e) {
+            return $this->repositoryFailure('list versions of', $name, $e);
+        }
+
         $versions = array_map(
             static fn (StoredDefinition $v): array => [
                 'version' => $v->version,
@@ -241,7 +247,7 @@ final class StudioController extends Controller
                 'published_at' => $v->publishedAt?->format(DateTimeInterface::ATOM),
                 'checksum' => $v->checksum,
             ],
-            $this->definitions->versions($name),
+            $stored,
         );
 
         usort($versions, static fn (array $a, array $b): int => $b['version'] <=> $a['version']);
@@ -251,24 +257,23 @@ final class StudioController extends Controller
 
     /**
      * JSON: a node-level visual diff between two versions (`?from=&to=`).
-     * The classification is computed SERVER-side and the response is a
-     * REDACTED union graph — every node's `config` is stripped before it
-     * leaves the server (via {@see GraphRedactor}), so the diff view never
-     * exposes secrets even though it needs no edit gate. Every node and
-     * connection carries a `diff_state` of added|removed|changed|unchanged
-     * for the canvas overlay to color. `changed` is detected from a
-     * content hash over type + config, so a pure layout move does not count.
+     * The classification is computed SERVER-side and the response strips
+     * every node's `config` before it leaves the server (same posture as
+     * {@see GraphRedactor}, applied here node-by-node in {@see self::diffNode()}),
+     * so the diff view never exposes secrets even though it needs no edit
+     * gate. Every node and connection carries a `diff_state` of
+     * added|removed|changed|unchanged for the canvas overlay to color.
+     * `changed` is detected from a content hash over type + config, so a
+     * pure layout move does not count.
      */
     public function diff(Request $request, string $name): JsonResponse
     {
-        $from = (int) $request->query('from');
-        $to = (int) $request->query('to');
-
-        if ($from < 1 || $to < 1) {
-            return response()->json([
-                'message' => 'Both a "from" and a "to" version number (>= 1) are required.',
-            ], 422);
-        }
+        $validated = $request->validate([
+            'from' => 'required|integer|min:1',
+            'to' => 'required|integer|min:1',
+        ]);
+        $from = (int) $validated['from'];
+        $to = (int) $validated['to'];
 
         try {
             $fromGraph = $this->definitions->find($name, $from)->graph;
@@ -277,6 +282,8 @@ final class StudioController extends Controller
             return response()->json([
                 'message' => "One of versions {$from} or {$to} of [{$name}] does not exist.",
             ], 404);
+        } catch (Throwable $e) {
+            return $this->repositoryFailure('diff', $name, $e);
         }
 
         return response()->json($this->buildDiff($fromGraph, $toGraph, $from, $to));
@@ -295,14 +302,8 @@ final class StudioController extends Controller
         return Authorize::action(
             'edit_definition',
             function () use ($request, $name): JsonResponse {
-                $version = (int) $request->input('version');
-
-                if ($version < 1) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'A version number (>= 1) to publish is required.',
-                    ], 422);
-                }
+                $validated = $request->validate(['version' => 'required|integer|min:1']);
+                $version = (int) $validated['version'];
 
                 try {
                     $published = $this->definitions->publish($name, $version);
@@ -322,6 +323,8 @@ final class StudioController extends Controller
                         'message' => 'The version is invalid and was not published.',
                         'data' => ['violations' => $e->violations()],
                     ], 422);
+                } catch (Throwable $e) {
+                    return $this->repositoryFailure('publish a version of', $name, $e, withSuccessFlag: true);
                 }
 
                 return response()->json([
@@ -332,6 +335,31 @@ final class StudioController extends Controller
             },
             context: ['flowName' => $name],
         );
+    }
+
+    /**
+     * Uniform sanitized 500 for an unexpected repository failure (a DB
+     * outage, or a `DefinitionSignatureException` when signing is enabled
+     * and a stored row was tampered with). Never returns the raw exception
+     * message to the client and, for a `QueryException`, never LOGS the
+     * message either — it interpolates bound values (including graph config)
+     * into the SQL. Same posture as `storeDraft()`.
+     */
+    private function repositoryFailure(string $action, string $name, Throwable $e, bool $withSuccessFlag = false): JsonResponse
+    {
+        Log::warning("laravel-flow-admin: failed to {$action} a flow definition", [
+            'name' => $name,
+            'exception' => $e::class,
+            'detail' => $e instanceof QueryException ? 'SQLSTATE ' . $e->getCode() : $e->getMessage(),
+        ]);
+
+        $body = ['message' => 'Something went wrong. Try again.'];
+
+        if ($withSuccessFlag) {
+            $body = ['success' => false, 'message' => 'Could not publish. Try again.', 'data' => []];
+        }
+
+        return response()->json($body, 500);
     }
 
     /**
@@ -440,7 +468,10 @@ final class StudioController extends Controller
 
     /**
      * A content hash over a node's meaningful fields (type + config) so a
-     * pure layout move (position only) is never reported as "changed".
+     * pure layout move (position only) is never reported as "changed". The
+     * config is canonicalized (recursively key-sorted) first, so two
+     * semantically-identical configs that differ only in key order are not
+     * misclassified as "changed".
      *
      * @param  array<string, mixed>  $node
      */
@@ -448,8 +479,27 @@ final class StudioController extends Controller
     {
         return md5((string) json_encode([
             'type' => $node['type'] ?? null,
-            'config' => $node['config'] ?? [],
+            'config' => $this->canonicalize($node['config'] ?? []),
         ]));
+    }
+
+    /**
+     * Recursively key-sorts arrays so a hash over the result is independent
+     * of key insertion order (list arrays keep their element order).
+     */
+    private function canonicalize(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        $canonical = array_map($this->canonicalize(...), $value);
+
+        if (! array_is_list($canonical)) {
+            ksort($canonical);
+        }
+
+        return $canonical;
     }
 
     /**

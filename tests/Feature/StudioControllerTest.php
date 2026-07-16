@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelFlowAdmin\Tests\Feature;
 
+use Mockery;
 use Padosoft\LaravelFlow\Contracts\DefinitionRepository;
 use Padosoft\LaravelFlow\Graph\GraphSerializer;
 use Padosoft\LaravelFlow\Graph\StoredDefinition;
@@ -13,6 +14,7 @@ use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
 use Padosoft\LaravelFlowAdmin\Tests\Concerns\MigratesFlowTables;
 use Padosoft\LaravelFlowAdmin\Tests\Stubs\DemoTriggerNode;
 use Padosoft\LaravelFlowAdmin\Tests\TestCase;
+use RuntimeException;
 
 /**
  * Pins that the Studio canvas/JSON-API routes are wired into the SAME
@@ -257,6 +259,21 @@ final class StudioControllerTest extends TestCase
         $response = $this->getJson(route('flow-admin.studio.diff', ['name' => 'diff-flow']) . '?from=1');
 
         $response->assertStatus(422);
+    }
+
+    public function test_version_list_returns_a_sanitized_500_when_the_repository_throws(): void
+    {
+        // A DB outage / DefinitionSignatureException must NOT propagate the
+        // raw exception message (which can carry graph contents) to the client.
+        $repository = Mockery::mock(DefinitionRepository::class);
+        $repository->shouldReceive('versions')->andThrow(new RuntimeException('password=hunter2 in a leaked SQL string'));
+        $this->app->instance(DefinitionRepository::class, $repository);
+
+        $response = $this->getJson(route('flow-admin.studio.version-list', ['name' => 'any-flow']));
+
+        $response->assertStatus(500);
+        $response->assertDontSee('hunter2');
+        $response->assertJson(['message' => 'Something went wrong. Try again.']);
     }
 
     public function test_publish_endpoint_is_forbidden_by_default(): void

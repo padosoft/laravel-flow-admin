@@ -822,7 +822,10 @@ function diffGraphToFlowElements(graph, catalog) {
         fontSize: 13,
         opacity: removed ? 0.6 : 1,
       },
-      'data-diff-state': state,
+      // React Flow's default node renderer applies `className` to the node
+      // wrapper (arbitrary top-level keys like a `data-*` attr are dropped),
+      // so this is the honored way to expose the diff state to CSS/tests.
+      className: `diff-node-${state}`,
     };
   });
 

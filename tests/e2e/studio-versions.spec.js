@@ -82,5 +82,7 @@ test.describe('flow-admin studio versioning (E-PR4)', () => {
     await expect(page.getByTestId('diff-removed-count')).toContainText('0');
     // The diff canvas renders the union graph — all 4 unchanged/changed nodes.
     await expect(page.getByTestId('diff-canvas').locator('.react-flow__node')).toHaveCount(4);
+    // Exactly one node carries the "changed" diff class the overlay colors by.
+    await expect(page.getByTestId('diff-canvas').locator('.react-flow__node.diff-node-changed')).toHaveCount(1);
   });
 });
