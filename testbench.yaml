@@ -15,7 +15,23 @@ providers:
 #     Playwright can exercise the Studio editor's save-as-draft flow
 #     end-to-end. Production never sets this — the shipped default stays
 #     deny-by-default (see config/flow-admin.php).
+#   - DB_CONNECTION=sqlite / DB_DATABASE=<file> → the served app's WRITE path
+#     (DefinitionRepository::createDraft, save-as-draft) MUST hit the same
+#     persistent SQLite file scripts/serve-testbench.mjs migrated, NOT
+#     testbench's default `testing`/`:memory:` connection. This env block is
+#     read by the served app itself, so it works even where the PHP built-in
+#     server grandchild does NOT inherit the serve script's process env — it
+#     didn't on CI's Ubuntu runner: the served app fell back to
+#     `testing`/`:memory:` and every save 500'd with "no such table:
+#     flow_definitions" (green locally, where the env happened to inherit).
+#     The relative path resolves against the serve cwd (repo root) — the same
+#     file the migrate + WAL steps target by absolute path. NOTE: only the
+#     `testbench serve` runtime reads this block; the PHPUnit suite is driven
+#     by phpunit.xml (its own `testing`/`:memory:` env), so this does not
+#     touch unit/feature tests.
 env:
   FLOW_ADMIN_MIDDLEWARE: web
   FLOW_ADMIN_ADAPTER: array
   FLOW_ADMIN_AUTHORIZER: allow
+  DB_CONNECTION: sqlite
+  DB_DATABASE: storage/testing/flow-admin-e2e.sqlite
