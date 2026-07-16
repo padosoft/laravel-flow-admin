@@ -273,6 +273,7 @@ final class StudioControllerTest extends TestCase
 
         $response->assertStatus(500);
         $response->assertDontSee('hunter2');
+        $response->assertDontSee('leaked SQL string');
         $response->assertJson(['message' => 'Something went wrong. Try again.']);
     }
 

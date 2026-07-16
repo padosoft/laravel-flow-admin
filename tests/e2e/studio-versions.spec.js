@@ -17,6 +17,14 @@ async function saveDraft(page) {
 }
 
 test.describe('flow-admin studio versioning (E-PR4)', () => {
+  test('the read-only canvas links into the versions page', async ({ page }) => {
+    await page.goto('/flow/studio/OrderCheckoutFlow');
+    await page.getByTestId('studio-versions-link').click();
+
+    await expect(page).toHaveURL(/\/flow\/studio\/OrderCheckoutFlow\/versions$/);
+    await expect(page.getByTestId('flow-studio-versions')).toBeVisible();
+  });
+
   test('the versions page lists a saved draft with its status', async ({ page }) => {
     await page.goto('/flow/studio/OrderCheckoutFlow/edit');
     const version = await saveDraft(page);
