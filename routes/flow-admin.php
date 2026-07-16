@@ -28,6 +28,10 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
         Route::get('/studio/{name}/edit', [StudioController::class, 'edit'])->name('studio.edit');
         Route::get('/studio/{name}/edit-graph', [StudioController::class, 'editGraph'])->name('studio.edit-graph');
         Route::post('/studio/{name}/draft', [StudioController::class, 'storeDraft'])->name('studio.draft');
+        Route::get('/studio/{name}/versions', [StudioController::class, 'versions'])->name('studio.versions');
+        Route::get('/studio/{name}/version-list', [StudioController::class, 'versionList'])->name('studio.version-list');
+        Route::get('/studio/{name}/diff', [StudioController::class, 'diff'])->name('studio.diff');
+        Route::post('/studio/{name}/publish', [StudioController::class, 'publish'])->name('studio.publish');
         Route::get('/studio/{name}', [StudioController::class, 'show'])->name('studio.show');
         Route::get('/runs', [RunsController::class, 'index'])->name('runs.index');
         Route::get('/runs/{id}', [RunDetailController::class, 'show'])->name('runs.show');
