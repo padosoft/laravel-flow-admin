@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use Padosoft\LaravelFlowAdmin\Authorizers\AllowAllAuthorizer;
 use Padosoft\LaravelFlowAdmin\Authorizers\DenyAllAuthorizer;
 
 return [
@@ -49,9 +50,18 @@ return [
     | Action authorizer
     |--------------------------------------------------------------------------
     | Default deny-by-default implementation. Override in host apps to integrate
-    | your permission model and make read / mutation actions available.
+    | your permission model and make read / mutation actions available (bind
+    | your own ActionAuthorizer in a service provider — not via this env var,
+    | which only selects between the two SHIPPED, non-RBAC implementations).
+    |
+    | FLOW_ADMIN_AUTHORIZER=allow opts into AllowAllAuthorizer — dev/E2E only
+    | (see testbench.yaml), never production. Any value other than the
+    | literal "allow" keeps the deny-by-default binding, including an unset
+    | or unrecognized env var.
     */
-    'authorizer' => DenyAllAuthorizer::class,
+    'authorizer' => strtolower((string) env('FLOW_ADMIN_AUTHORIZER', 'deny')) === 'allow'
+        ? AllowAllAuthorizer::class
+        : DenyAllAuthorizer::class,
 
     /*
     |--------------------------------------------------------------------------

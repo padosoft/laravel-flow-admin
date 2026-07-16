@@ -18,42 +18,31 @@ use Padosoft\LaravelFlow\Graph\StoredDefinition;
 use Padosoft\LaravelFlow\Node\NodeRegistry;
 use Padosoft\LaravelFlowAdmin\Adapters\EloquentReadModel;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\KpiSummary;
+use Padosoft\LaravelFlowAdmin\Tests\Concerns\MigratesFlowTables;
 use Padosoft\LaravelFlowAdmin\Tests\Stubs\DemoTriggerNode;
 use Padosoft\LaravelFlowAdmin\Tests\TestCase;
 use RuntimeException;
 
 final class EloquentReadModelTest extends TestCase
 {
+    use MigratesFlowTables;
+
     private const UTC = 'UTC';
 
     private int $runIndex = 1;
 
     private int $approvalIndex = 1;
 
-    private string $databasePath;
-
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->databasePath = tempnam(sys_get_temp_dir(), 'lfa-read-model-') . '.sqlite';
-        touch($this->databasePath);
-
-        $this->app['config']->set('database.default', 'sqlite');
-        $this->app['config']->set('database.connections.sqlite.database', $this->databasePath);
-        DB::purge('sqlite');
-        DB::statement('PRAGMA foreign_keys = ON');
-
-        $this->migrateFlowTables();
+        $this->setUpFlowDatabase();
     }
 
     protected function tearDown(): void
     {
-        DB::disconnect('sqlite');
-
-        if (isset($this->databasePath) && file_exists($this->databasePath)) {
-            unlink($this->databasePath);
-        }
+        $this->tearDownFlowDatabase();
 
         parent::tearDown();
     }
@@ -590,6 +579,49 @@ final class EloquentReadModelTest extends TestCase
         $this->assertNull($model->graph('anything'));
     }
 
+    public function test_editable_graph_includes_unredacted_config_and_version_status_for_a_draft(): void
+    {
+        $registry = $this->app->make(NodeRegistry::class);
+        if (! $registry->has('test.studio.demo-trigger')) {
+            $registry->register(DemoTriggerNode::class);
+        }
+
+        $graphDefinition = new GraphDefinition([
+            new GraphNode('start', 'test.studio.demo-trigger', ['api_key' => 'sk_test_should_be_visible_here'], ['x' => 0, 'y' => 0]),
+        ], []);
+
+        $repository = $this->app->make(DefinitionRepository::class);
+        // Deliberately left as a draft — editableGraph() is NOT
+        // status-filtered like graph(), unlike the published-only test above.
+        $repository->createDraft('studio-editable-flow', $graphDefinition);
+
+        $result = $this->makeModel()->editableGraph('studio-editable-flow');
+
+        $this->assertNotNull($result);
+        $this->assertSame(1, $result['version']);
+        $this->assertSame('draft', $result['status']);
+        $this->assertSame(['api_key' => 'sk_test_should_be_visible_here'], $result['graph']['nodes'][0]['config']);
+        $this->assertArrayHasKey('test.studio.demo-trigger', $result['catalog']);
+    }
+
+    public function test_editable_graph_returns_null_when_no_version_exists(): void
+    {
+        $this->assertNull($this->makeModel()->editableGraph('does-not-exist'));
+    }
+
+    public function test_catalog_returns_every_registered_node_type_not_just_used_ones(): void
+    {
+        $registry = $this->app->make(NodeRegistry::class);
+        if (! $registry->has('test.studio.demo-trigger')) {
+            $registry->register(DemoTriggerNode::class);
+        }
+
+        $catalog = $this->makeModel()->catalog();
+
+        $this->assertArrayHasKey('test.studio.demo-trigger', $catalog);
+        $this->assertSame('json', $catalog['test.studio.demo-trigger']['outputs'][0]['type']);
+    }
+
     public function test_recent_batch_cap_bounds_search_but_not_plain_listing(): void
     {
         // Mirrors EloquentReadModel::RECENT_BATCH_CAP. Seed one more run
@@ -719,36 +751,6 @@ final class EloquentReadModelTest extends TestCase
         );
     }
 
-    private function migrateFlowTables(): void
-    {
-        $directory = $this->resolveMigrationDirectory();
-        $files = glob($directory . DIRECTORY_SEPARATOR . '*.php') ?: [];
-        sort($files);
-
-        foreach ($files as $file) {
-            $this->runMigration($file);
-        }
-    }
-
-    private function resolveMigrationDirectory(): string
-    {
-        $candidates = [
-            dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'vendor/padosoft/laravel-flow/database/migrations',
-            base_path('vendor/padosoft/laravel-flow/database/migrations'),
-            dirname(base_path(), 1) . DIRECTORY_SEPARATOR . 'vendor/padosoft/laravel-flow/database/migrations',
-        ];
-
-        foreach ($candidates as $candidate) {
-            if (is_dir($candidate)) {
-                return $candidate;
-            }
-        }
-
-        $this->fail('Migration directory not found for padosoft/laravel-flow');
-
-        return '';
-    }
-
     private function seedAudit(array $attributes): void
     {
         DB::table('flow_audit')->insert([
@@ -761,16 +763,6 @@ final class EloquentReadModelTest extends TestCase
             'business_impact' => json_encode($attributes['business_impact'] ?? null),
             'created_at' => $this->asTimestamp($attributes['created_at'] ?? new DateTimeImmutable('now', new DateTimeZone(self::UTC))),
         ]);
-    }
-
-    private function runMigration(string $path): void
-    {
-        if (! file_exists($path)) {
-            $this->fail('Migration file not found: ' . $path);
-        }
-
-        $migration = require $path;
-        $migration->up();
     }
 
     private function seedRun(array $attributes): string

@@ -57,4 +57,12 @@ final class DashboardActionAuthorizer implements ActionAuthorizer
     {
         return $this->upstream->canViewKpis($actor);
     }
+
+    public function canEditDefinition(string $flowName, ?array $actor): bool
+    {
+        // No dedicated method exists on the upstream contract (it has no
+        // definition-editing concept at all). A host app that wants Studio
+        // editing enabled binds its own ActionAuthorizer implementation.
+        return false;
+    }
 }

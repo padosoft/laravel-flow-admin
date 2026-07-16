@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelFlowAdmin\Tests\Feature;
 
+use Padosoft\LaravelFlow\Node\NodeRegistry;
 use Padosoft\LaravelFlowAdmin\Adapters\ArrayReadModel;
 use Padosoft\LaravelFlowAdmin\Adapters\EloquentReadModel;
+use Padosoft\LaravelFlowAdmin\Authorizers\AllowAllAuthorizer;
 use Padosoft\LaravelFlowAdmin\Authorizers\DenyAllAuthorizer;
 use Padosoft\LaravelFlowAdmin\Contracts\ActionAuthorizer;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
@@ -85,5 +87,41 @@ class ServiceProviderTest extends TestCase
             $this->assertSame('Action not authorized', $exception->getMessage());
             $this->assertSame(403, $exception->getStatusCode());
         }
+    }
+
+    public function test_demo_nodes_are_not_registered_when_adapter_is_eloquent(): void
+    {
+        // TestCase's default environment config never sets flow-admin.adapter,
+        // so it resolves to the package default ('eloquent') at the time
+        // registerDemoNodesIfInDemoMode() ran during this app's boot — the
+        // registry it populated must NOT carry the array-adapter's demo
+        // fixture node types, proving a production Eloquent deployment's
+        // NodeRegistry stays free of them.
+        $registry = $this->app->make(NodeRegistry::class);
+
+        foreach (['demo.trigger', 'demo.validate', 'demo.charge', 'demo.notify'] as $type) {
+            $this->assertFalse($registry->has($type), "NodeRegistry must not have [{$type}] registered outside array adapter mode");
+        }
+    }
+
+    public function test_allow_all_authorizer_is_refused_in_the_production_environment(): void
+    {
+        $this->app['config']->set('flow-admin.authorizer', AllowAllAuthorizer::class);
+        $this->app->forgetInstance(ActionAuthorizer::class);
+        $this->app['env'] = 'production';
+
+        $authorizer = $this->app->make(ActionAuthorizer::class);
+
+        $this->assertInstanceOf(DenyAllAuthorizer::class, $authorizer);
+    }
+
+    public function test_allow_all_authorizer_is_honored_outside_production(): void
+    {
+        $this->app['config']->set('flow-admin.authorizer', AllowAllAuthorizer::class);
+        $this->app->forgetInstance(ActionAuthorizer::class);
+
+        $authorizer = $this->app->make(ActionAuthorizer::class);
+
+        $this->assertInstanceOf(AllowAllAuthorizer::class, $authorizer);
     }
 }

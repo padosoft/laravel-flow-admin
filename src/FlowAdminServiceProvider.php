@@ -6,6 +6,7 @@ namespace Padosoft\LaravelFlowAdmin;
 
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Padosoft\LaravelFlow\Contracts\DefinitionRepository;
@@ -13,9 +14,14 @@ use Padosoft\LaravelFlow\Dashboard\FlowDashboardReadModel;
 use Padosoft\LaravelFlow\Node\NodeRegistry;
 use Padosoft\LaravelFlowAdmin\Adapters\ArrayReadModel;
 use Padosoft\LaravelFlowAdmin\Adapters\EloquentReadModel;
+use Padosoft\LaravelFlowAdmin\Authorizers\AllowAllAuthorizer;
 use Padosoft\LaravelFlowAdmin\Authorizers\DenyAllAuthorizer;
 use Padosoft\LaravelFlowAdmin\Contracts\ActionAuthorizer;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
+use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoChargeNode;
+use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoNotifyNode;
+use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoTriggerNode;
+use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoValidateNode;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\AdminCssController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\StudioCssController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\StudioJsController;
@@ -63,6 +69,17 @@ class FlowAdminServiceProvider extends ServiceProvider
                 return new DenyAllAuthorizer;
             }
 
+            // FLOW_ADMIN_AUTHORIZER=allow (config/flow-admin.php) is meant
+            // for local dev / E2E only. A stray or copy-pasted value in a
+            // production .env would otherwise silently disable EVERY
+            // mutation gate, not just Studio editing — refuse it here
+            // regardless of what the config resolved to.
+            if ($authorizerClass === AllowAllAuthorizer::class && $app->environment('production')) {
+                Log::warning('laravel-flow-admin: FLOW_ADMIN_AUTHORIZER=allow is ignored in the production environment; falling back to DenyAllAuthorizer.');
+
+                return new DenyAllAuthorizer;
+            }
+
             /** @var class-string<ActionAuthorizer> $authorizerClass */
             $authorizer = $app->make($authorizerClass);
             if (! $authorizer instanceof ActionAuthorizer) {
@@ -75,6 +92,8 @@ class FlowAdminServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->registerDemoNodesIfInDemoMode();
+
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'flow-admin');
 
         // Register file-based (anonymous) Blade components under the
@@ -130,35 +149,75 @@ class FlowAdminServiceProvider extends ServiceProvider
     }
 
     /**
-     * Register a static asset route that serves the package's design-system
-     * stylesheet directly from `resources/css/admin.css`. The file is the
+     * `ArrayReadModel`'s fixture graph/catalog reference node types
+     * (`demo.trigger`, `demo.validate`, `demo.charge`, `demo.notify`) that
+     * only exist as fixture DATA, not as real `NodeRegistry` entries.
+     * `GraphValidator` (used by `StudioController::storeDraft()`, always
+     * on the real registry regardless of `flow-admin.adapter`) would
+     * reject every Studio-composed graph in demo mode as "unknown node
+     * type" without this. Registering real handler classes for them ONLY
+     * when `adapter === 'array'` keeps a production Eloquent deployment's
+     * `NodeRegistry` free of demo/fixture noise — those deployments
+     * register their own real node types via the host app.
+     */
+    private function registerDemoNodesIfInDemoMode(): void
+    {
+        if (strtolower((string) $this->app->make('config')->get('flow-admin.adapter', 'eloquent')) !== 'array') {
+            return;
+        }
+
+        $registry = $this->app->make(NodeRegistry::class);
+
+        // register() throws DuplicateNodeTypeException on a second call
+        // for the same type — guard per type rather than registerMany(),
+        // since boot() can plausibly observe an already-populated registry
+        // (e.g. a host app registering the same handler class itself, or
+        // a future test/console context that boots this provider twice).
+        $handlers = [
+            'demo.trigger' => DemoTriggerNode::class,
+            'demo.validate' => DemoValidateNode::class,
+            'demo.charge' => DemoChargeNode::class,
+            'demo.notify' => DemoNotifyNode::class,
+        ];
+
+        foreach ($handlers as $type => $handlerClass) {
+            if ($registry->has($type)) {
+                continue;
+            }
+
+            $registry->register($handlerClass);
+        }
+    }
+
+    /**
+     * Register the package's static asset routes (`admin.css`, `studio.js`,
+     * `studio.css`) served directly from `resources/`. `admin.css` is the
      * pixel-perfect port of `.design-source/project/styles.css` and provides
      * the design tokens (light + dark theme) consumed by every admin Blade
-     * template.
+     * template; the studio assets back the React island canvas.
      *
-     * The handler is an invokable controller (`AdminCssController`), NOT a
-     * closure: Laravel cannot serialise closures for `php artisan
-     * route:cache`, which is a common production optimisation in consumer
-     * apps. The controller form keeps the package route-cacheable and lets
-     * the cache headers (Last-Modified, must-revalidate, max-age=300)
-     * live in tested code rather than in this provider.
+     * The handlers are invokable controllers, NOT closures: Laravel cannot
+     * serialise closures for `php artisan route:cache`, a common production
+     * optimisation in consumer apps. The controller form keeps the package
+     * route-cacheable and lets the cache headers (Last-Modified,
+     * must-revalidate, max-age=300) live in tested code rather than here.
      *
-     * Why a Laravel route instead of a Vite-built link tag:
+     * Why Laravel routes instead of Vite-built link/script tags:
      * - Testbench's `serve` command does not expose this package's
      *   `public/vendor/flow-admin/` build output through its public dir, so
      *   the Vite hashed-asset URL is unreachable during E2E.
      * - Consumer apps that have run `php artisan vendor:publish
      *   --tag=flow-admin-assets` get the optimised hashed assets via the
-     *   normal Vite manifest at runtime; this fallback route is the
+     *   normal Vite manifest at runtime; these fallback routes are the
      *   "always works" path that does not require a publish step.
-     * - The route is intentionally registered outside `routes/flow-admin.php`
-     *   so it does NOT inherit the admin middleware stack (`web,auth`):
-     *   stylesheets must be reachable for unauthenticated users too,
+     * - They are intentionally registered outside `routes/flow-admin.php`
+     *   so they do NOT inherit the admin middleware stack (`web,auth`):
+     *   stylesheets/scripts must be reachable for unauthenticated users too,
      *   otherwise the login redirect would render unstyled.
      *
-     * The route lives under `/_flow-admin/assets/{file}` — the underscore
-     * prefix marks it as a package-internal route, away from the
-     * user-facing `/flow` namespace.
+     * The routes live under `/_flow-admin/assets/{file}` — the underscore
+     * prefix marks them as package-internal, away from the user-facing
+     * `/flow` namespace.
      */
     private function registerPackagedAssetRoutes(): void
     {

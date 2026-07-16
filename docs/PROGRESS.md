@@ -5,16 +5,8 @@
 
 ## Now / Next / Blocked
 
-- **Now (2026-07-14)**: Macro E (Flow Studio UI, Laravel Flow 2.0 program) in progress on macro branch `task/v2e-studio`. **E-PR0 DONE** (PR #30 + docs follow-up PR #31) and **E-PR1 DONE** (PR #33) — see "Macro E" section below for both subtasks' full detail.
-- **Now (validated locally, 2026-07-14 — full gate, PHP + frontend + e2e, on `task/v2e-studio` post-E-PR1)**:
-  - `composer validate --strict --no-check-publish` ✅
-  - `composer format:test` ✅
-  - `composer analyse` (PHPStan level 8) ✅
-  - `composer test` ✅ (121 tests, 651 assertions)
-  - `npm run lint` ✅
-  - `npm run build` ✅
-  - `npm run test:e2e` ✅ (21/21 passed, 3 visual-gated skipped)
-- **Next**: E-PR2 — read-only canvas rendering (render a published `GraphDefinition`, nodes from the catalog, typed color-coded wires per the verified 6-case `PortType` legend), on a subtask branch off `task/v2e-studio`, per `docs/superpowers/plans/2026-07-14-macro-e-studio-ui.md` in the core repo.
+- **Now (2026-07-16)**: **E-PR3 (canvas editor) PR #36** (`task/v2e-03-canvas-editor` → `task/v2e-studio`) — fixing red CI E2E jobs. **Confirmed root cause via a new "dump laravel.log on E2E failure" CI step**: the `testbench serve` app's save-as-draft write ran against testbench's default `testing`/`:memory:` connection (empty → `no such table: flow_definitions` → 500), NOT the persistent SQLite file the serve script migrated — because the `php -S` grandchild did not inherit the serve script's process env on CI's Ubuntu runner (green locally, where it did). **Fix**: force `DB_CONNECTION: sqlite` in `testbench.yaml`'s `env:` block (read by the served app itself; does NOT leak into the phpunit suite), and migrate the skeleton's OWN `database_path('database.sqlite')` from `serve-testbench.mjs` — both the migrate process and the served app boot the `@testbench` skeleton so both compute the identical absolute path via the connection's `env('DB_DATABASE', database_path(...))` default, with no relative-path/CWD/env-inheritance dependency (a first attempt using a relative `DB_DATABASE` in testbench.yaml was WRONG — `artisan serve` runs the `php -S` worker with CWD = the skeleton's `public_path()`, caught by local Copilot review round 7). Verified by inspecting the skeleton `database/database.sqlite` after an E2E run: the persisted `OrderCheckoutFlow`/`studio-e2e-delete-node-regression` draft rows prove the served app wrote to that exact absolute path. An earlier WAL-journal hypothesis (`scripts/enable-wal.php`) was wrong-but-kept as genuine defense now that writes actually hit the shared file concurrently with the `/flow/api/live` poll reads. Also addressed all 4 PR-review comments (3 Copilot + 1 Codex P2): tempnam leak in `MigratesFlowTables`, undefined `--border-default`/`--text-primary` CSS tokens (→ `--border`/`--text`), guaranteed test DB cleanup via `tearDown()`, `recomputeEdgeValidity()` so a fan-in-invalid wire recovers after its conflicting edge is deleted. Local Copilot review NO_FINDINGS on the round-6 code (round 6a caught a stray NUL byte in a fan-in key, fixed).
+- **Local gate (2026-07-16, PHP 8.5 fresh server)**: Pint ✅, PHPStan level 8 ✅, PHPUnit ✅ (147 tests / 769 assertions, unaffected by testbench.yaml DB env), ESLint ✅, build ✅, Playwright studio-editor chromium 7/7. **Next remote step**: push the connection fix, re-verify CI E2E green on PR #36 head (this is the real test — local always passed because it inherited the env), re-request Copilot review, resolve comments, merge into `task/v2e-studio`. Earlier: **E-PR0 DONE** (PR #30 + docs #31), **E-PR1 DONE** (PR #33), **E-PR2 DONE** (PR #35) — see "Macro E" section below.
 - **Blocked**: none.
 
 ## Macro E — Flow Studio UI (in progress)

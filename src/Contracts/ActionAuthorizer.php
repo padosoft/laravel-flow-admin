@@ -51,4 +51,18 @@ interface ActionAuthorizer
      * @param  array<string, mixed>|null  $actor
      */
     public function canViewKpis(?array $actor): bool;
+
+    /**
+     * Gates both loading a flow definition's UNREDACTED graph for editing
+     * (node `config` included — unlike the read-only Studio canvas's graph
+     * endpoint, which redacts it) and saving an edited graph as a new draft
+     * version. There is no dedicated upstream (`padosoft/laravel-flow`
+     * `Dashboard\Authorization\DashboardActionAuthorizer`) equivalent —
+     * that contract has no definition-editing concept — so this is
+     * admin-package-local, same as {@see self::canCancelRun()} and
+     * {@see self::canRetryWebhook()}.
+     *
+     * @param  array<string, mixed>|null  $actor
+     */
+    public function canEditDefinition(string $flowName, ?array $actor): bool;
 }

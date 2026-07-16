@@ -20,7 +20,14 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
     ->group(function () {
         Route::get('/', [OverviewController::class, 'index'])->name('overview');
         Route::get('/studio', [StudioController::class, 'index'])->name('studio');
+        // Literal /studio/catalog and every /studio/{name}/... suffix route
+        // must be registered before the catch-all /studio/{name} below, or
+        // that route swallows them (e.g. "catalog" resolved as a flow name).
+        Route::get('/studio/catalog', [StudioController::class, 'catalog'])->name('studio.catalog');
         Route::get('/studio/{name}/graph', [StudioController::class, 'graph'])->name('studio.graph');
+        Route::get('/studio/{name}/edit', [StudioController::class, 'edit'])->name('studio.edit');
+        Route::get('/studio/{name}/edit-graph', [StudioController::class, 'editGraph'])->name('studio.edit-graph');
+        Route::post('/studio/{name}/draft', [StudioController::class, 'storeDraft'])->name('studio.draft');
         Route::get('/studio/{name}', [StudioController::class, 'show'])->name('studio.show');
         Route::get('/runs', [RunsController::class, 'index'])->name('runs.index');
         Route::get('/runs/{id}', [RunDetailController::class, 'show'])->name('runs.show');

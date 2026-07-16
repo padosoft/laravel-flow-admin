@@ -56,6 +56,10 @@ final class Authorize
                 $actor,
             ),
             'view_kpis', 'view-kpis' => $authorizer->canViewKpis($actor),
+            'edit_definition', 'edit-definition' => $authorizer->canEditDefinition(
+                (string) ($context['flowName'] ?? $context['flow_name'] ?? ''),
+                $actor,
+            ),
             default => throw new HttpException(400, "Unsupported action: {$action}"),
         };
 
@@ -111,7 +115,7 @@ final class Authorize
     {
         $safe = [];
 
-        foreach (['runId', 'run_id', 'outboxId', 'outbox_id'] as $key) {
+        foreach (['runId', 'run_id', 'outboxId', 'outbox_id', 'flowName', 'flow_name'] as $key) {
             if (! array_key_exists($key, $context)) {
                 continue;
             }
