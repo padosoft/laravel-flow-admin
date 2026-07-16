@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelFlowAdmin\Http\Controllers;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -164,14 +165,19 @@ final class StudioController extends Controller
                 try {
                     $stored = $this->definitions->createDraft($name, $graph);
                 } catch (Throwable $e) {
-                    // Message + exception class only — never the full
-                    // context, which could carry the graph's contents.
-                    // Same pattern as EloquentReadModel::graph()'s
-                    // DefinitionRepository failure handling.
+                    // Exception class + a redaction-safe detail only — never
+                    // the full context, which could carry the graph's
+                    // contents (same spirit as EloquentReadModel::graph()).
+                    // A QueryException's message interpolates the bound
+                    // values into the SQL, and this INSERT carries the
+                    // UNREDACTED graph (node `config` may hold secrets), so
+                    // for that type log only the SQLSTATE/driver code, never
+                    // the raw message. Other exception types don't embed the
+                    // persisted payload, so their message is safe to keep.
                     Log::warning('laravel-flow-admin: failed to save a flow definition draft', [
                         'name' => $name,
                         'exception' => $e::class,
-                        'message' => $e->getMessage(),
+                        'detail' => $e instanceof QueryException ? 'SQLSTATE ' . $e->getCode() : $e->getMessage(),
                     ]);
 
                     return response()->json([

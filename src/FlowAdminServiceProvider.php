@@ -149,37 +149,6 @@ class FlowAdminServiceProvider extends ServiceProvider
     }
 
     /**
-     * Register a static asset route that serves the package's design-system
-     * stylesheet directly from `resources/css/admin.css`. The file is the
-     * pixel-perfect port of `.design-source/project/styles.css` and provides
-     * the design tokens (light + dark theme) consumed by every admin Blade
-     * template.
-     *
-     * The handler is an invokable controller (`AdminCssController`), NOT a
-     * closure: Laravel cannot serialise closures for `php artisan
-     * route:cache`, which is a common production optimisation in consumer
-     * apps. The controller form keeps the package route-cacheable and lets
-     * the cache headers (Last-Modified, must-revalidate, max-age=300)
-     * live in tested code rather than in this provider.
-     *
-     * Why a Laravel route instead of a Vite-built link tag:
-     * - Testbench's `serve` command does not expose this package's
-     *   `public/vendor/flow-admin/` build output through its public dir, so
-     *   the Vite hashed-asset URL is unreachable during E2E.
-     * - Consumer apps that have run `php artisan vendor:publish
-     *   --tag=flow-admin-assets` get the optimised hashed assets via the
-     *   normal Vite manifest at runtime; this fallback route is the
-     *   "always works" path that does not require a publish step.
-     * - The route is intentionally registered outside `routes/flow-admin.php`
-     *   so it does NOT inherit the admin middleware stack (`web,auth`):
-     *   stylesheets must be reachable for unauthenticated users too,
-     *   otherwise the login redirect would render unstyled.
-     *
-     * The route lives under `/_flow-admin/assets/{file}` — the underscore
-     * prefix marks it as a package-internal route, away from the
-     * user-facing `/flow` namespace.
-     */
-    /**
      * `ArrayReadModel`'s fixture graph/catalog reference node types
      * (`demo.trigger`, `demo.validate`, `demo.charge`, `demo.notify`) that
      * only exist as fixture DATA, not as real `NodeRegistry` entries.
@@ -220,6 +189,36 @@ class FlowAdminServiceProvider extends ServiceProvider
         }
     }
 
+    /**
+     * Register the package's static asset routes (`admin.css`, `studio.js`,
+     * `studio.css`) served directly from `resources/`. `admin.css` is the
+     * pixel-perfect port of `.design-source/project/styles.css` and provides
+     * the design tokens (light + dark theme) consumed by every admin Blade
+     * template; the studio assets back the React island canvas.
+     *
+     * The handlers are invokable controllers, NOT closures: Laravel cannot
+     * serialise closures for `php artisan route:cache`, a common production
+     * optimisation in consumer apps. The controller form keeps the package
+     * route-cacheable and lets the cache headers (Last-Modified,
+     * must-revalidate, max-age=300) live in tested code rather than here.
+     *
+     * Why Laravel routes instead of Vite-built link/script tags:
+     * - Testbench's `serve` command does not expose this package's
+     *   `public/vendor/flow-admin/` build output through its public dir, so
+     *   the Vite hashed-asset URL is unreachable during E2E.
+     * - Consumer apps that have run `php artisan vendor:publish
+     *   --tag=flow-admin-assets` get the optimised hashed assets via the
+     *   normal Vite manifest at runtime; these fallback routes are the
+     *   "always works" path that does not require a publish step.
+     * - They are intentionally registered outside `routes/flow-admin.php`
+     *   so they do NOT inherit the admin middleware stack (`web,auth`):
+     *   stylesheets/scripts must be reachable for unauthenticated users too,
+     *   otherwise the login redirect would render unstyled.
+     *
+     * The routes live under `/_flow-admin/assets/{file}` — the underscore
+     * prefix marks them as package-internal, away from the user-facing
+     * `/flow` namespace.
+     */
     private function registerPackagedAssetRoutes(): void
     {
         Route::get('/_flow-admin/assets/admin.css', AdminCssController::class)
