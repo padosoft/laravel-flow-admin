@@ -5,16 +5,9 @@
 
 ## Now / Next / Blocked
 
-- **Now (2026-07-14)**: Macro E (Flow Studio UI, Laravel Flow 2.0 program) in progress on macro branch `task/v2e-studio`. **E-PR0 DONE** (PR #30 + docs follow-up PR #31) and **E-PR1 DONE** (PR #33) — see "Macro E" section below for both subtasks' full detail.
-- **Now (validated locally, 2026-07-14 — full gate, PHP + frontend + e2e, on `task/v2e-studio` post-E-PR1)**:
-  - `composer validate --strict --no-check-publish` ✅
-  - `composer format:test` ✅
-  - `composer analyse` (PHPStan level 8) ✅
-  - `composer test` ✅ (121 tests, 651 assertions)
-  - `npm run lint` ✅
-  - `npm run build` ✅
-  - `npm run test:e2e` ✅ (21/21 passed, 3 visual-gated skipped)
-- **Next**: E-PR2 — read-only canvas rendering (render a published `GraphDefinition`, nodes from the catalog, typed color-coded wires per the verified 6-case `PortType` legend), on a subtask branch off `task/v2e-studio`, per `docs/superpowers/plans/2026-07-14-macro-e-studio-ui.md` in the core repo.
+- **Now (2026-07-16)**: **E-PR3 (canvas editor) PR #36** (`task/v2e-03-canvas-editor` → `task/v2e-studio`) — round-6 fixes pushed. Fixed the red CI E2E jobs (chromium/firefox/webkit): the "save as draft" write collided with the concurrent `/flow/api/live` poll read on SQLite's default journal lock and failed fast ("database is locked") under CI's PHP built-in server — resolved by putting the E2E SQLite file into WAL journal mode after migration (`scripts/enable-wal.php` via `serve-testbench.mjs`), plus a CI step that dumps `laravel.log` on E2E failure. Also addressed all 4 PR-review comments (3 Copilot + 1 Codex P2): tempnam leak in `MigratesFlowTables`, undefined `--border-default`/`--text-primary` CSS tokens (→ `--border`/`--text`), guaranteed test DB cleanup via `tearDown()`, and `recomputeEdgeValidity()` so a fan-in-invalid wire recovers after its conflicting edge is deleted. Local Copilot review converged to NO_FINDINGS (round 6b; round 6a caught a stray NUL byte in a fan-in key, fixed).
+- **Local gate (2026-07-16, PHP 8.5 fresh server)**: Pint ✅, PHPStan level 8 ✅, PHPUnit ✅ (147 tests / 769 assertions), ESLint ✅, build ✅, Playwright chromium 16 pass, firefox+webkit 28 pass (1 pre-existing delete-node UI flake absorbed by CI retries).
+- **Next remote step**: verify CI green on PR #36 head + re-request Copilot review, resolve any comments, then merge into `task/v2e-studio`. Earlier: **E-PR0 DONE** (PR #30 + docs #31), **E-PR1 DONE** (PR #33), **E-PR2 DONE** (PR #35) — see "Macro E" section below.
 - **Blocked**: none.
 
 ## Macro E — Flow Studio UI (in progress)

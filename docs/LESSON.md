@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-07-16 — E-PR3 (canvas editor): an E2E DB WRITE that's green locally but red in CI is SQLite journal-lock contention; and a stray NUL byte in source
+
+### A Playwright "save" scenario that persists to SQLite is green locally and red in CI → suspect journal-lock contention, not a logic bug
+
+E-PR3's "save as draft" E2E POSTs to `storeDraft()`, which opens a `BEGIN IMMEDIATE` write transaction (`DefinitionRepository::createDraft()` under `lockForUpdate()`). The Studio canvas ALSO polls `/flow/api/live` on an interval while the editor is open, so a read overlaps the write. On SQLite's default rollback-journal mode a writer takes a whole-file lock, and with the server's default zero `busy_timeout` a concurrent reader makes the writer fail **immediately** with "database is locked" — not wait. That surfaced as a deterministic `500 Could not save the draft. Try again.` on the slower/consistent CI runner while every local run (faster machine, contention window rarely aligned) stayed green. The read-only E2E scenarios all passed because the `array` ReadModel adapter serves reads from in-memory fixtures and never touches the write DB — only the WRITE path hit the lock. **Confirmation was decisive precisely because the PHPUnit Feature test `test_store_draft_endpoint_saves_a_valid_graph_as_a_new_draft_version` exercises the SAME `storeDraft()`→`createDraft()` path and is green on PHP 8.3** — that ruled out "createDraft is broken on 8.3" and pointed straight at something only the concurrent E2E serve does.
+
+**How to apply:** when an E2E that writes to a file-backed SQLite is green locally but red/flaky in CI, and the read-only scenarios pass, assume writer/reader journal-lock contention before assuming a version-specific logic bug. Put the E2E database into WAL journal mode (`PRAGMA journal_mode=WAL`) — it is a PERSISTENT property stored in the file header, so setting it ONCE right after migration (before the server starts) makes every per-request connection the built-in server opens inherit it; readers and a single writer then proceed concurrently. See `scripts/enable-wal.php` run from `scripts/serve-testbench.mjs`. Add a `busy_timeout` too as belt-and-suspenders (per-connection, non-persisted). And: the server-side exception behind a caught-and-logged 500 lands in the testbench app's `storage/logs/laravel.log`, NOT in the Playwright/webServer stdout — so it is invisible in CI unless you add a step that dumps that log on failure. Add that step; without it a caught 500 is a black box.
+
+### A single NUL byte (U+0000) in a source file turns it "binary" to git and ships into the bundle
+
+A fan-in dedup key was written as `` `${edge.target}\0${edge.targetHandle}` `` with a literal NUL between the interpolations instead of a printable delimiter. JS tolerates embedded NULs in strings/`Set` keys, and neither operand can contain one, so de-dup kept working — but git rendered the whole file as `Binary files … differ` (so `git diff`/`git blame`/PR-review tooling silently stopped showing changes for it), and the NUL survived `npm run build` into `public/vendor/flow-admin/assets/*.js`. **How to apply:** when `git diff --stat` reports `Bin <a> -> <b> bytes` for a file you edit as text, do NOT shrug it off — grep the file for NUL bytes (`python -c "print(open(p,'rb').read().count(b'\x00'))"`) before committing. Match the file's existing delimiter convention (this file uses `.` for composite keys, e.g. `${wire.targetNodeId}.${wire.targetPortKey}`).
+
+---
+
 ## 2026-07-14 — E-PR1 (React island pipeline): `defaults.run.working-directory` silently doesn't apply to `uses:` steps, and a "build once" fix that wasn't
 
 ### `actions/upload-artifact` / `actions/download-artifact`'s `path:` is workspace-root-relative even inside a job with `defaults.run.working-directory` set
