@@ -18,14 +18,20 @@
  * for belt-and-suspenders.
  *
  * Database: before serving, this script migrates core's (`padosoft/laravel-flow`)
- * tables into a fresh, persistent SQLite file (`storage/testing/flow-admin-e2e.sqlite`,
- * recreated on every run) and points `DB_DATABASE` at it for BOTH the migrate
- * step and the served app. A real file, not `:memory:`, is required: PHP's
- * built-in dev server spawns a fresh process per request, which would wipe
- * an in-memory database between every HTTP request. This is what lets the
- * Studio editor's "save as draft" E2E scenario (E-PR3) actually persist —
- * `Contracts\DefinitionRepository` is core's own binding and is NOT
- * swappable via `FLOW_ADMIN_ADAPTER` the way `ReadModel` is.
+ * tables into a fresh, persistent SQLite file — the testbench skeleton's OWN
+ * `database_path('database.sqlite')` (recreated on every run). A real file,
+ * not the `testing` connection's `:memory:`, is required so the Studio
+ * editor's "save as draft" E2E scenario (E-PR3) actually persists across the
+ * served app's per-request work; `Contracts\DefinitionRepository` is core's
+ * own binding and is NOT swappable via `FLOW_ADMIN_ADAPTER` the way
+ * `ReadModel` is. The served app does NOT receive `DB_DATABASE` from this
+ * script's process env — `artisan serve` runs the `php -S` worker with CWD =
+ * the skeleton's `public_path()` and forwards only a passthrough env
+ * allowlist, so DB_* is dropped. Instead `testbench.yaml` forces
+ * `DB_CONNECTION: sqlite` (a channel the served app DOES read), and both this
+ * migrate step and the served app fall back to the SAME absolute
+ * `database_path('database.sqlite')` because both boot the `@testbench`
+ * skeleton. See the `e2eDatabasePath` comment below for the full rationale.
  *
  * Cross-platform launcher:
  *   - POSIX: `spawn('php', ['vendor/bin/testbench', 'serve', …])`.
