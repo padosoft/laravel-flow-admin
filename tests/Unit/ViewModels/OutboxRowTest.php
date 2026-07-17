@@ -41,6 +41,79 @@ final class OutboxRowTest extends TestCase
         $this->assertSame($expected, OutboxRow::fromDto($dto)->canRetry);
     }
 
+    /**
+     * @return array<string, array{0: string, 1: bool}>
+     */
+    public static function redeliverEligibilityProvider(): array
+    {
+        // Narrower than canRetry: Flow::redeliverWebhook only requeues a
+        // `failed` row, so only that status offers the Redeliver button.
+        return [
+            'failed can redeliver' => ['failed', true],
+            'pending cannot' => ['pending', false],
+            'dead cannot' => ['dead', false],
+            'delivered cannot' => ['delivered', false],
+            'unknown cannot' => ['some-future-status', false],
+        ];
+    }
+
+    #[DataProvider('redeliverEligibilityProvider')]
+    public function test_can_redeliver_only_for_failed_rows(string $status, bool $expected): void
+    {
+        // Numeric id: the redeliver route is whereNumber + the controller casts
+        // to int, so canRedeliver also requires a numeric id (see below).
+        $dto = new OutboxEntry(
+            id: '7',
+            eventType: 'run.succeeded',
+            destination: 'https://hooks.example.test/wh',
+            status: $status,
+            attempts: 1,
+            nextAttemptAt: null,
+            lastError: null,
+        );
+
+        $this->assertSame($expected, OutboxRow::fromDto($dto)->canRedeliver);
+    }
+
+    /**
+     * @return array<string, array{0: string, 1: bool}>
+     */
+    public static function canonicalIdProvider(): array
+    {
+        // canRedeliver must mirror the controller's canonical-id guard so the
+        // button never renders for a failed row whose id the /redeliver route +
+        // round-trip guard would reject with a 404.
+        return [
+            'canonical positive int' => ['7', true],
+            'multi-digit canonical' => ['1024', true],
+            'max route length (18 digits)' => ['999999999999999999', true],
+            'leading zero' => ['007', false],
+            'zero' => ['0', false],
+            'negative' => ['-5', false],
+            'non-numeric' => ['outbox_abc', false],
+            'empty' => ['', false],
+            // 19 digits: canonical + in-range for int, but exceeds the route's
+            // [0-9]{1,18} cap, so the button must not render (it would 404).
+            '19 digits exceeds route cap' => ['1000000000000000000', false],
+        ];
+    }
+
+    #[DataProvider('canonicalIdProvider')]
+    public function test_can_redeliver_requires_a_canonical_numeric_id_on_a_failed_row(string $id, bool $expected): void
+    {
+        $dto = new OutboxEntry(
+            id: $id,
+            eventType: 'run.succeeded',
+            destination: 'https://hooks.example.test/wh',
+            status: 'failed',
+            attempts: 1,
+            nextAttemptAt: null,
+            lastError: null,
+        );
+
+        $this->assertSame($expected, OutboxRow::fromDto($dto)->canRedeliver);
+    }
+
     public function test_status_label_uses_format_helper(): void
     {
         $dto = new OutboxEntry(

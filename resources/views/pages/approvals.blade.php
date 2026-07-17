@@ -19,8 +19,19 @@
                         </div>
                         <div class="approval-actions">
                             <a class="btn sm" href="{{ route('flow-admin.runs.show', ['id' => $approval->runId]) }}">Inspect</a>
-                            <button class="btn sm danger" type="button">Reject</button>
-                            <button class="btn sm primary" type="button">Approve</button>
+                            @if ($approval->canDecide())
+                                <button class="btn sm danger" type="button"
+                                    data-flow-action
+                                    data-testid="approval-reject"
+                                    data-action-url="{{ route('flow-admin.approvals.reject', ['tokenHash' => $approval->tokenHash]) }}"
+                                    data-confirm="Reject this approval? The run will be failed."
+                                    data-busy-label="Rejecting…">Reject</button>
+                                <button class="btn sm primary" type="button"
+                                    data-flow-action
+                                    data-testid="approval-approve"
+                                    data-action-url="{{ route('flow-admin.approvals.approve', ['tokenHash' => $approval->tokenHash]) }}"
+                                    data-busy-label="Approving…">Approve</button>
+                            @endif
                         </div>
                     </div>
                 @empty
@@ -29,4 +40,6 @@
             </div>
         </div>
     </div>
+
+    @include('flow-admin::partials.action-runner')
 @endsection

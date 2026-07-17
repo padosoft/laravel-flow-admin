@@ -9,7 +9,7 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![PHP Version](https://img.shields.io/packagist/php-v/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![Laravel](https://img.shields.io/badge/Laravel-%5E13.0-ff2d20?style=flat-square&logo=laravel)](https://laravel.com)
-[![Tests](https://img.shields.io/badge/tests-180%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
+[![Tests](https://img.shields.io/badge/tests-228%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![E2E](https://img.shields.io/badge/playwright-chromium%20%7C%20firefox%20%7C%20webkit-45ba4b?style=flat-square&logo=playwright)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%208-brightgreen?style=flat-square)](https://phpstan.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-pint-7e22ce?style=flat-square)](https://laravel.com/docs/pint)
@@ -71,9 +71,9 @@
 ## 🎯 Features
 
 - 📊 **Overview dashboard** — KPI tiles, sparklines, recent runs, queue health, error rate.
-- 🏃 **Runs index & detail** — filterable list, full timeline (timeline / Gantt / DAG), payload diff, retry/cancel actions.
-- ✅ **Approvals inbox** — pending decisions with one-click approve / reject through your own authorizer.
-- 📤 **Webhook outbox** — delivery state, replay failed jobs, inspect headers/payloads.
+- 🏃 **Runs index & detail** — filterable list, full timeline (timeline / Gantt / DAG), payload diff, plus live **Cancel** (active runs → `Flow::cancel()`) and **Replay** (terminal, pinned graph runs → `Flow::replay()` as a new linked run) actions, each behind your `ActionAuthorizer`.
+- ✅ **Approvals inbox** — pending decisions with one-click **Approve / Reject**, decided by the approval's token **hash** (`Flow::resumeByHash()` / `rejectByHash()`) so the dashboard never holds a plaintext token — through your own authorizer.
+- 📤 **Webhook outbox** — delivery state, one-click **Redeliver** of a FAILED delivery (`Flow::redeliverWebhook()` requeues it to pending), inspect headers/payloads.
 - 📋 **Flow definitions** — registered workflows, version, last activity at a glance.
 - 🧩 **Flow Studio canvas** — React + `@xyflow/react` visual graph: read-only view of a flow's published version, plus a full drag-and-drop editor (palette from the node catalog, typed-connection validation, node inspector, save-as-draft) gated by your `ActionAuthorizer`.
 - 🗂️ **Flow versioning** — every stored version listed with its draft/published/archived status, one-click **Publish** behind an immutability confirmation (core re-validates on publish), and a node-level **visual diff** between any two versions (added glows green, removed red-dashed, changed amber) computed server-side so no node `config` ever leaves the server.
@@ -86,7 +86,7 @@
 - 🛡️ **Deny-by-default authorizer** — every mutation goes through your `ActionAuthorizer`. No accidents.
 - 🔁 **Auto-refreshing pages** — configurable polling (`/flow/api/live`).
 - 🧱 **Adapter pattern** — `eloquent` for prod, `array` for demos / E2E (deterministic seed-42 fixtures).
-- 🧪 **Battle-tested** — 180 PHPUnit tests, 28 Playwright scenarios (84 runs across Chromium / Firefox / WebKit — 78 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario).
+- 🧪 **Battle-tested** — 228 PHPUnit tests, 33 Playwright scenarios (99 runs across Chromium / Firefox / WebKit — 93 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario).
 - 📦 **Zero-coupling** — built on a public `Contracts\*` surface; engine internals stay `@internal`.
 
 ---
@@ -363,10 +363,15 @@ All routes live under the configured prefix (default `/flow`) and the `flow-admi
 | `POST` | `/studio/{name}/ai-build` | `flow-admin.studio.ai-build` | Generates an already-validated draft graph from a natural-language prompt via `padosoft/laravel-flow-ai` (never persists — returns the envelope for review) — gated by `ActionAuthorizer::canEditDefinition()`; 404 when the AI package is absent |
 | `GET` | `/runs` | `flow-admin.runs.index` | Runs list |
 | `GET` | `/runs/{id}` | `flow-admin.runs.show` | Run detail + timeline |
+| `POST` | `/runs/{id}/cancel` | `flow-admin.runs.cancel` | Cancels an active run via `Flow::cancel()` (aborts the run, terminates its non-terminal nodes) — gated by `ActionAuthorizer::canCancelRun()`, deny-by-default |
+| `POST` | `/runs/{id}/replay` | `flow-admin.runs.replay` | Replays a terminal, pinned graph run via `Flow::replay()` as a new linked run — gated by `ActionAuthorizer::canReplayRun()`, deny-by-default |
 | `GET` | `/approvals` | `flow-admin.approvals.index` | Approvals inbox |
+| `POST` | `/approvals/{tokenHash}/approve` | `flow-admin.approvals.approve` | Grants a pending approval by its token HASH via `Flow::resumeByHash()` (resumes the paused run) — gated by `ActionAuthorizer::canApproveByToken()`, deny-by-default |
+| `POST` | `/approvals/{tokenHash}/reject` | `flow-admin.approvals.reject` | Rejects a pending approval by its token HASH via `Flow::rejectByHash()` (fails the paused run) — gated by `ActionAuthorizer::canRejectByToken()`, deny-by-default |
 | `GET` | `/advisor` | `flow-admin.advisor.index` | Flow Advisor inbox (scan affordance) |
 | `POST` | `/advisor/scan` | `flow-admin.advisor.scan` | Runs the deterministic `FlowAdvisor` across flows; persists a draft version per suggestion (never publishes), returns the findings — gated by `ActionAuthorizer::canEditDefinition()` + rate-limited; 404 when the AI package is absent |
 | `GET` | `/outbox` | `flow-admin.outbox.index` | Webhook outbox |
+| `POST` | `/outbox/{id}/redeliver` | `flow-admin.outbox.redeliver` | Requeues a FAILED webhook outbox row via `Flow::redeliverWebhook()` (resets it to pending); a wrong-state row yields 409 — gated by `ActionAuthorizer::canRetryWebhook()`, deny-by-default |
 | `GET` | `/definitions` | `flow-admin.definitions.index` | Registered flows |
 | `GET` | `/settings` | `flow-admin.settings.index` | Effective configuration |
 | `GET` | `/api/search` | `flow-admin.api.search` | ⌘K palette backend |
@@ -445,13 +450,13 @@ Every push runs through this gate (matrix `php: 8.3, 8.4` × `laravel: 13`):
 composer validate --strict --no-check-publish
 composer format:test          # Laravel Pint
 composer analyse              # PHPStan / Larastan level 8
-composer test                 # PHPUnit — 180 tests, 945 assertions
+composer test                 # PHPUnit — 228 tests, 1042 assertions
 npm run lint                  # ESLint flat config
 npm run build                 # Vite build verification
 npm run test:e2e              # Playwright on chromium + firefox + webkit
 ```
 
-Latest local run: **180 tests / 945 assertions / 78 E2E runs passed** (28 Playwright scenarios × 3 browsers, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser limitations on one node-deletion scenario).
+Latest local run: **228 tests / 1042 assertions / 93 E2E runs passed** (33 Playwright scenarios × 3 browsers, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser limitations on one node-deletion scenario).
 
 ---
 

@@ -63,8 +63,29 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
         Route::get('/runs', [RunsController::class, 'index'])->name('runs.index');
         Route::get('/runs/{id}/monitor', [RunMonitorController::class, 'show'])->name('runs.monitor');
         Route::get('/runs/{id}/monitor-state', [RunMonitorController::class, 'state'])->name('runs.monitor-state');
+        // Mutation endpoints (E-PR6) — each wraps a core FlowEngine seam in
+        // Support\Authorize::action (deny-by-default) and returns the uniform
+        // {success,message,data} JSON contract. Grouped with the run routes;
+        // ordering vs the GET /runs/{id} route is irrelevant here since these
+        // are POST and route matching is HTTP-method specific.
+        Route::post('/runs/{id}/cancel', [RunDetailController::class, 'cancel'])->name('runs.cancel');
+        Route::post('/runs/{id}/replay', [RunDetailController::class, 'replay'])->name('runs.replay');
         Route::get('/runs/{id}', [RunDetailController::class, 'show'])->name('runs.show');
         Route::get('/approvals', [ApprovalsController::class, 'index'])->name('approvals.index');
+        // {tokenHash} is the SHA-256 token hash — exactly 64 lowercase/uppercase
+        // hex chars. Constrain to that so an over-long or malformed segment can
+        // never reach the controller/authorizer/logs, and to enforce the
+        // documented contract. Not a secret: the plaintext token is never
+        // recoverable from it (see ApprovalSummary).
+        Route::post('/approvals/{tokenHash}/approve', [ApprovalsController::class, 'approve'])
+            ->where('tokenHash', '[A-Fa-f0-9]{64}')->name('approvals.approve');
+        Route::post('/approvals/{tokenHash}/reject', [ApprovalsController::class, 'reject'])
+            ->where('tokenHash', '[A-Fa-f0-9]{64}')->name('approvals.reject');
+        // {id} bounded to 1–18 digits: an outbox id is an integer PK, and
+        // capping the length keeps `(int)` casts safely below PHP_INT_MAX so a
+        // pathological long digit string can't overflow into a different row.
+        Route::post('/outbox/{id}/redeliver', [OutboxController::class, 'redeliver'])
+            ->where('id', '[0-9]{1,18}')->name('outbox.redeliver');
         Route::get('/advisor', [AdvisorController::class, 'index'])->name('advisor.index');
         // Registered unconditionally (no package-presence oracle — the
         // controller does its class_exists() 404 INSIDE the edit_definition

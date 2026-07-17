@@ -136,7 +136,9 @@ final class ArrayReadModel implements ReadModel
                     'requested_at' => $approval['requested_at'] ?? null,
                     'decided_at' => $approval['decided_at'] ?? null,
                     'actor' => (string) ($approval['actor'] ?? 'system'),
-                    'token_hash' => (string) ($approval['token_hash'] ?? sha1($tokenId)),
+                    // SHA-256 (64 hex) so the demo/array approve+reject links
+                    // satisfy the route's 64-hex {tokenHash} constraint.
+                    'token_hash' => (string) ($approval['token_hash'] ?? hash('sha256', $tokenId)),
                     'description' => (string) ($approval['description'] ?? "Approval requested for {$stepName}"),
                 ];
 
@@ -178,8 +180,9 @@ final class ArrayReadModel implements ReadModel
                     continue;
                 }
 
+                $tokenId = (string) ($approval['id'] ?? ('approval_' . substr((string) $run['id'], 0, 8)));
                 $pending[] = $this->mapApproval([
-                    'id' => (string) ($approval['id'] ?? ('approval_' . substr((string) $run['id'], 0, 8))),
+                    'id' => $tokenId,
                     'run_id' => (string) $run['id'],
                     'step_name' => (string) ($approval['step'] ?? 'run'),
                     'status' => 'pending',
@@ -187,6 +190,10 @@ final class ArrayReadModel implements ReadModel
                     'actor' => (string) ($approval['actor'] ?? 'system'),
                     'decided_at' => $approval['decided_at'] ?? null,
                     'description' => (string) ($approval['description'] ?? 'Manual approval required'),
+                    // Parity with listApprovals()'s row: carry a SHA-256 (64 hex)
+                    // token hash so the ApprovalCard can offer approve/reject and
+                    // the demo link satisfies the route's 64-hex constraint.
+                    'token_hash' => (string) ($approval['token_hash'] ?? hash('sha256', $tokenId)),
                 ]);
             }
         }
@@ -729,6 +736,7 @@ final class ArrayReadModel implements ReadModel
             requestedAt: $this->timestampToDateTimeImmutable($approval['requested_at'] ?? null),
             approver: $approval['actor'] ?? null,
             decidedAt: $this->timestampToDateTimeImmutable($approval['decided_at'] ?? null),
+            tokenHash: isset($approval['token_hash']) ? (string) $approval['token_hash'] : null,
         );
     }
 
