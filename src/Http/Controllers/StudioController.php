@@ -12,6 +12,7 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Padosoft\LaravelFlow\Contracts\DefinitionRepository;
+use Padosoft\LaravelFlow\Executor\DryRun\DryRunPlanner;
 use Padosoft\LaravelFlow\Graph\Exceptions\DefinitionLifecycleException;
 use Padosoft\LaravelFlow\Graph\Exceptions\DefinitionNotFoundException;
 use Padosoft\LaravelFlow\Graph\Exceptions\InvalidGraphException;
@@ -360,6 +361,38 @@ final class StudioController extends Controller
         }
 
         return response()->json($body, 500);
+    }
+
+    /**
+     * Statically plans the POSTed graph via core's `DryRunPlanner` and returns
+     * the Kahn-wave execution plan + cost estimate, executing NO handler and
+     * writing ZERO rows (by construction of the planner). Advisory only, so —
+     * like the diff read endpoint — it needs no edit gate: the response is
+     * structural (node ids, wave grouping, cost dimensions), never node
+     * `config`. `DryRunPlanner` is method-injected from the container.
+     */
+    public function dryRun(Request $request, DryRunPlanner $planner, string $name): JsonResponse
+    {
+        /** @var array<string, mixed> $payload */
+        $payload = (array) $request->json()->all();
+
+        try {
+            $graph = $this->serializer->fromArray($payload);
+        } catch (InvalidGraphException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The graph is invalid and cannot be planned.',
+                'data' => ['violations' => $e->violations()],
+            ], 422);
+        }
+
+        $result = $planner->plan($graph);
+
+        return response()->json([
+            'flow' => $name,
+            'plan' => $result['plan']->toArray(),
+            'cost' => $result['cost']->toArray(),
+        ]);
     }
 
     /**
