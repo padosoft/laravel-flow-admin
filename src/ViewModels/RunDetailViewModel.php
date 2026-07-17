@@ -16,10 +16,6 @@ use Padosoft\LaravelFlowAdmin\Contracts\Dto\RunDetail;
 final readonly class RunDetailViewModel
 {
     /**
-     * @param  list<StepRow>  $steps
-     * @param  list<AuditEventRow>  $audit
-     */
-    /**
      * Public run-status slugs that are still ACTIVE (non-terminal). Cancel is
      * offered only for these; replay only for their complement (any terminal
      * state). Keyed on the admin's public slug (see EloquentReadModel::
