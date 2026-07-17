@@ -9,15 +9,43 @@ namespace Padosoft\LaravelFlowAdmin\Contracts;
  *
  * The concrete implementation is host-app specific in production. The
  * package ships a deny-by-default implementation for safe defaults.
+ *
+ * ENFORCEMENT POSTURE — read this before implementing:
+ * The panel is "read-only by default": with the shipped `DenyAllAuthorizer`
+ * you can BROWSE production data on day 1, and every MUTATION is denied. So the
+ * package's controllers wire the authorizer on the mutation/authoring surfaces
+ * ONLY — {@see self::canEditDefinition()} (edit-graph/draft/publish/dry-run/
+ * ai-build/advisor-scan), {@see self::canCancelRun()}, {@see self::canReplayRun()},
+ * {@see self::canApproveByToken()}, {@see self::canRejectByToken()},
+ * {@see self::canRetryWebhook()}.
+ * The VIEW methods below — {@see self::canViewRuns()}, {@see self::canViewRunDetail()},
+ * {@see self::canViewKpis()} — are RESERVED forward-looking hooks: they are NOT
+ * yet invoked by any controller, because enforcing them under the default
+ * deny-all would contradict the day-1-browse promise (an unimplemented
+ * authorizer would then hide everything). Implementing them today has no
+ * effect until per-view enforcement is wired (tracked follow-up). Do not rely
+ * on them for access control yet; put view/tenant scoping in your route
+ * middleware for now.
  */
 interface ActionAuthorizer
 {
     /**
+     * RESERVED — not yet enforced by any controller (see the interface-level
+     * "enforcement posture" note). Reserved for opt-in per-actor run-list
+     * visibility; today the runs list is open to anyone past the route-group
+     * `auth` middleware.
+     *
      * @param  array<string, mixed>|null  $actor
      */
     public function canViewRuns(?array $actor): bool;
 
     /**
+     * RESERVED — not yet enforced by any controller (see the interface-level
+     * "enforcement posture" note). Reserved for opt-in per-run view
+     * authorization (e.g. multi-tenant isolation) on the run-detail page and
+     * the live-monitor endpoints; today those are open to anyone past the
+     * route-group `auth` middleware.
+     *
      * @param  array<string, mixed>|null  $actor
      */
     public function canViewRunDetail(string $runId, ?array $actor): bool;
@@ -48,6 +76,11 @@ interface ActionAuthorizer
     public function canRetryWebhook(int $outboxId, ?array $actor): bool;
 
     /**
+     * RESERVED — not yet enforced by any controller (see the interface-level
+     * "enforcement posture" note). Reserved for opt-in KPI-tile visibility;
+     * today the overview KPIs are open to anyone past the route-group `auth`
+     * middleware.
+     *
      * @param  array<string, mixed>|null  $actor
      */
     public function canViewKpis(?array $actor): bool;

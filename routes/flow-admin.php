@@ -34,7 +34,17 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
         Route::get('/studio/{name}/version-list', [StudioController::class, 'versionList'])->name('studio.version-list');
         Route::get('/studio/{name}/diff', [StudioController::class, 'diff'])->name('studio.diff');
         Route::post('/studio/{name}/publish', [StudioController::class, 'publish'])->name('studio.publish');
-        Route::post('/studio/{name}/dry-run', [StudioController::class, 'dryRun'])->name('studio.dry-run');
+        // Gated by edit_definition INSIDE the controller (dry-run is an
+        // authoring action). Throttled on TOP of that gate: it accepts an
+        // arbitrary client graph and runs GraphValidator + DryRunPlanner on
+        // every call, so an authorized-but-careless (or compromised) editor
+        // could otherwise drive unbounded planning compute. 30/min per user is
+        // generous for interactive dry-running yet caps runaway/scripted load.
+        // Dedicated key prefix so the bucket isn't shared with other bare
+        // throttled routes (see the ai-build note above for the same reasoning).
+        Route::post('/studio/{name}/dry-run', [StudioController::class, 'dryRun'])
+            ->middleware('throttle:30,1,flow-admin-dry-run')
+            ->name('studio.dry-run');
         // Registered UNCONDITIONALLY even though padosoft/laravel-flow-ai is
         // optional: gating the route on class_exists() would 404 at the router
         // (before auth) when the pack is absent vs 403 when present, leaking

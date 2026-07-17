@@ -373,50 +373,64 @@ final class StudioController extends Controller
     /**
      * Statically plans the POSTed graph via core's `DryRunPlanner` and returns
      * the Kahn-wave execution plan + cost estimate, executing NO handler and
-     * writing ZERO rows (by construction of the planner). Advisory only, so it
-     * needs no edit gate: the response is structural (node ids, wave grouping,
-     * cost dimensions), never node `config` — and the node types + `#[Cost]`
-     * hints it exposes are already public via the ungated `catalog()` endpoint.
-     * `DryRunPlanner` is method-injected from the container.
+     * writing ZERO rows (by construction of the planner). `DryRunPlanner` is
+     * method-injected from the container.
+     *
+     * Gated by `ActionAuthorizer::canEditDefinition()` — dry-running is an
+     * AUTHORING action (the editor's "what would this graph do?" preview),
+     * peer to `editGraph()`/`storeDraft()`/`aiBuild()`, NOT a browse/read
+     * surface. Its RESPONSE is non-secret (structural node ids/waves/cost, the
+     * same visibility as the ungated `catalog()`), but it accepts an arbitrary
+     * client graph and runs `GraphValidator` + `DryRunPlanner` on every call,
+     * so leaving it open would let any authenticated user drive unbounded
+     * planning compute against any flow name past the deny-by-default gate that
+     * closes every other authoring endpoint. Also route-level throttled to bound
+     * that per-request cost.
      */
     public function dryRun(Request $request, DryRunPlanner $planner, string $name): JsonResponse
     {
-        /** @var array<string, mixed> $payload */
-        $payload = (array) $request->json()->all();
+        return Authorize::action(
+            'edit_definition',
+            function () use ($request, $planner, $name): JsonResponse {
+                /** @var array<string, mixed> $payload */
+                $payload = (array) $request->json()->all();
 
-        try {
-            $graph = $this->serializer->fromArray($payload);
-            // Semantic validation too (like storeDraft): GraphDefinition's
-            // constructor already rejects structural problems (cycles,
-            // connections to unknown nodes) inside fromArray(), but only
-            // GraphValidator catches an UNREGISTERED node type, an
-            // incompatible port-type wiring, or an unwired required input —
-            // any of which the planner would otherwise plan into a
-            // meaningless "trivially valid" result instead of a clear error.
-            $this->validator->validate($graph);
-        } catch (InvalidGraphException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'The graph is invalid and cannot be planned.',
-                'data' => ['violations' => $e->violations()],
-            ], 422);
-        }
+                try {
+                    $graph = $this->serializer->fromArray($payload);
+                    // Semantic validation too (like storeDraft): GraphDefinition's
+                    // constructor already rejects structural problems (cycles,
+                    // connections to unknown nodes) inside fromArray(), but only
+                    // GraphValidator catches an UNREGISTERED node type, an
+                    // incompatible port-type wiring, or an unwired required input —
+                    // any of which the planner would otherwise plan into a
+                    // meaningless "trivially valid" result instead of a clear error.
+                    $this->validator->validate($graph);
+                } catch (InvalidGraphException $e) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The graph is invalid and cannot be planned.',
+                        'data' => ['violations' => $e->violations()],
+                    ], 422);
+                }
 
-        try {
-            $result = $planner->plan($graph);
-        } catch (Throwable $e) {
-            // An unexpected planner/container error must not fall through to
-            // Laravel's default (often HTML, debug-leaking) renderer. Sanitized
-            // JSON 500; log class + a redaction-safe detail only, never the raw
-            // message (the graph payload can carry node config).
-            return $this->repositoryFailure('dry-run', $name, $e);
-        }
+                try {
+                    $result = $planner->plan($graph);
+                } catch (Throwable $e) {
+                    // An unexpected planner/container error must not fall through to
+                    // Laravel's default (often HTML, debug-leaking) renderer. Sanitized
+                    // JSON 500; log class + a redaction-safe detail only, never the raw
+                    // message (the graph payload can carry node config).
+                    return $this->repositoryFailure('dry-run', $name, $e);
+                }
 
-        return response()->json([
-            'flow' => $name,
-            'plan' => $result['plan']->toArray(),
-            'cost' => $result['cost']->toArray(),
-        ]);
+                return response()->json([
+                    'flow' => $name,
+                    'plan' => $result['plan']->toArray(),
+                    'cost' => $result['cost']->toArray(),
+                ]);
+            },
+            context: ['flowName' => $name],
+        );
     }
 
     /**

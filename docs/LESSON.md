@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-07-18 — Macro E Gate G3: the full-branch review catches gating gaps a per-subtask diff can't
+
+The macro-gate full-diff review of `task/v2e-studio` vs `main` (all of Macro E in one shot) surfaced two authorization consistency issues that every per-subtask PR review missed because each only saw its OWN slice:
+
+### `dryRun()` (E-PR7) was the ONE authoring endpoint left ungated + unthrottled
+`editGraph`/`storeDraft`/`publish`/`aiBuild` are all `Authorize::action('edit_definition', …)` and the compute/billable ones (`ai-build`, `advisor.scan`) carry a `throttle:`; `dryRun` had NEITHER. Its ORIGINAL rationale ("response is non-secret, so no gate") conflated two different risks — output-secrecy vs. compute-cost/consistency. Dry-running is an AUTHORING action (the editor's preview), so its peer is `editGraph` (gated), not the read-only `catalog()` (ungated). Fixed: gate on `edit_definition` + `throttle:30,1,flow-admin-dry-run`, add a deny-by-default Feature test, and bind AllowAll in the existing dry-run tests. **How to apply:** at a macro gate, list EVERY endpoint of one class (here: authoring mutations) side by side and check they share the same gate + throttle posture; a per-subtask review can't see that a sibling added later is inconsistent. "The output has no secrets" is NOT sufficient grounds to leave a compute-bearing, arbitrary-input endpoint ungated.
+
+### `canViewRuns`/`canViewRunDetail`/`canViewKpis` are declared but wired NOWHERE — and that's deliberate, not a bug
+Grepping `src/` shows all three view-authorizer methods are referenced only in `Support\Authorize`'s dispatch map, never called by a controller. This is CONSISTENT with the documented "read-only by default → browse on day 1 with deny-all" posture: enforcing views under `DenyAllAuthorizer` would hide everything and break that promise. So the methods are RESERVED forward-looking hooks, not dead code to wire blindly. **How to apply:** before "fixing" an unused authorizer/contract method by wiring it, check whether wiring it under the shipped default would CONTRADICT a documented value prop. If it's intentionally-reserved, make the contract honest (docblock: "RESERVED — not yet enforced") + a tracked follow-up, rather than enforcing it and breaking the default UX. Removing it would be a breaking interface change — also not free.
+
 ## 2026-07-17 — E-PR6 (working mutations): a new core `@api` field is invisible until every adapter→DTO→view hop forwards it
 
 ### The whole approve/reject-by-hash seam was dead on arrival because `tokenHash` was dropped at the adapter boundary

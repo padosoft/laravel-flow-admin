@@ -333,9 +333,26 @@ final class StudioControllerTest extends TestCase
         $response->assertJson(['success' => false]);
     }
 
+    public function test_dry_run_endpoint_is_forbidden_by_default(): void
+    {
+        // Dry-run is an authoring action gated by canEditDefinition(), like
+        // edit-graph/draft/publish/ai-build — closed under the default
+        // DenyAllAuthorizer.
+        $response = $this->postJson(route('flow-admin.studio.dry-run', ['name' => 'any-flow']), [
+            'schema_version' => 1,
+            'kind' => 'laravel-flow',
+            'metadata' => [],
+            'nodes' => [],
+            'connections' => [],
+        ]);
+
+        $response->assertStatus(403);
+    }
+
     public function test_dry_run_returns_the_wave_plan_and_cost_without_writing_any_rows(): void
     {
         $this->setUpFlowDatabase();
+        $this->bindAllowingAuthorizer();
         $this->registerDemoTrigger();
 
         $response = $this->postJson(route('flow-admin.studio.dry-run', ['name' => 'dryrun-flow']), [
@@ -361,6 +378,8 @@ final class StudioControllerTest extends TestCase
 
     public function test_dry_run_rejects_a_structurally_invalid_graph_with_422(): void
     {
+        $this->bindAllowingAuthorizer();
+
         $response = $this->postJson(route('flow-admin.studio.dry-run', ['name' => 'x']), [
             'schema_version' => 999, // unsupported → GraphSerializer::fromArray throws
             'kind' => 'laravel-flow',
@@ -379,6 +398,8 @@ final class StudioControllerTest extends TestCase
         // GraphDefinition are structural) but is rejected by GraphValidator —
         // so this exercises dryRun()'s validate() call specifically, the layer
         // GraphDefinition's own constructor does NOT cover.
+        $this->bindAllowingAuthorizer();
+
         $response = $this->postJson(route('flow-admin.studio.dry-run', ['name' => 'x']), [
             'schema_version' => 1,
             'kind' => 'laravel-flow',
