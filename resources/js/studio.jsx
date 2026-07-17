@@ -974,7 +974,7 @@ function AiBuildModal({ onClose, onGenerated, aiBuildUrl }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
       }}
     >
-      <div style={{ background: 'var(--bg-elevated, #1a1a1a)', color: 'var(--text, #eee)', borderRadius: 12, padding: 20, width: 'min(560px, 92vw)', border: '1px solid var(--border, #333)' }}>
+      <div style={{ background: 'var(--bg-elevated, #1a1a1a)', color: 'var(--text, #eee)', borderRadius: 8, padding: 20, width: 'min(560px, 92vw)', border: '1px solid var(--border, #333)' }}>
         <h3 id="ai-build-modal-title" style={{ margin: '0 0 8px', fontSize: 16 }}>Build with AI</h3>
         <p style={{ fontSize: 13, color: 'var(--text-secondary, #999)', margin: '0 0 12px' }}>
           Describe the flow in plain language. The generated graph is validated and loaded onto the canvas for you to review — nothing is saved until you click <b style={{ color: 'var(--text, #eee)' }}>Save as draft</b>.
