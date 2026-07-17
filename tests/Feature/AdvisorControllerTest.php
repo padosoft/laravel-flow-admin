@@ -61,9 +61,12 @@ final class AdvisorControllerTest extends TestCase
         $response = $this->get(route('flow-admin.advisor.index'));
 
         $response->assertStatus(200);
-        // The optional AI package is installed in the test matrix, so the scan
-        // button is present.
-        $response->assertSee('advisor-scan-button', escape: false);
+        // Assert the button's VISIBLE label (rendered only inside the button),
+        // not the "advisor-scan-button" testid — that string also appears in
+        // the page's inline <script> selectors, so asserting it would pass even
+        // if the button weren't rendered. The optional AI package is installed
+        // in the test matrix, so the affordance is present.
+        $response->assertSee('Scan flows for suggestions');
     }
 
     public function test_advisor_scan_is_forbidden_by_default(): void
