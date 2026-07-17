@@ -47,7 +47,7 @@ final class StudioControllerTest extends TestCase
         $configuredMiddleware = config('flow-admin.middleware', ['web', 'auth']);
         $routes = collect($this->app['router']->getRoutes()->getRoutes());
 
-        foreach (['flow-admin.studio.show', 'flow-admin.studio.graph', 'flow-admin.studio.catalog', 'flow-admin.studio.edit', 'flow-admin.studio.edit-graph', 'flow-admin.studio.draft', 'flow-admin.studio.versions', 'flow-admin.studio.version-list', 'flow-admin.studio.diff', 'flow-admin.studio.publish'] as $routeName) {
+        foreach (['flow-admin.studio.show', 'flow-admin.studio.graph', 'flow-admin.studio.catalog', 'flow-admin.studio.edit', 'flow-admin.studio.edit-graph', 'flow-admin.studio.draft', 'flow-admin.studio.versions', 'flow-admin.studio.version-list', 'flow-admin.studio.diff', 'flow-admin.studio.publish', 'flow-admin.studio.dry-run'] as $routeName) {
             $route = $routes->first(fn ($route) => $route->getName() === $routeName);
 
             $this->assertNotNull($route, "Route [{$routeName}] must be registered");
@@ -326,6 +326,67 @@ final class StudioControllerTest extends TestCase
 
         $response->assertStatus(409);
         $response->assertJson(['success' => false]);
+    }
+
+    public function test_dry_run_returns_the_wave_plan_and_cost_without_writing_any_rows(): void
+    {
+        $this->setUpFlowDatabase();
+        $this->registerDemoTrigger();
+
+        $response = $this->postJson(route('flow-admin.studio.dry-run', ['name' => 'dryrun-flow']), [
+            'schema_version' => 1,
+            'kind' => 'laravel-flow',
+            'metadata' => [],
+            'nodes' => [$this->triggerNode('start')],
+            'connections' => [],
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonStructure([
+            'flow',
+            'plan' => ['waves', 'skipped'],
+            'cost' => ['perNode', 'total'],
+        ]);
+        // Wave 0 (roots) contains the trigger node.
+        $this->assertContains('start', $response->json('plan.waves.0'));
+
+        // Dry run must write ZERO rows — no draft version was created.
+        $this->assertCount(0, $this->app->make(DefinitionRepository::class)->versions('dryrun-flow'));
+    }
+
+    public function test_dry_run_rejects_a_structurally_invalid_graph_with_422(): void
+    {
+        $response = $this->postJson(route('flow-admin.studio.dry-run', ['name' => 'x']), [
+            'schema_version' => 999, // unsupported → GraphSerializer::fromArray throws
+            'kind' => 'laravel-flow',
+            'metadata' => [],
+            'nodes' => [],
+            'connections' => [],
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJson(['success' => false]);
+    }
+
+    public function test_dry_run_rejects_a_semantically_invalid_graph_with_422(): void
+    {
+        // A node whose type is not registered parses fine (GraphSerializer /
+        // GraphDefinition are structural) but is rejected by GraphValidator —
+        // so this exercises dryRun()'s validate() call specifically, the layer
+        // GraphDefinition's own constructor does NOT cover.
+        $response = $this->postJson(route('flow-admin.studio.dry-run', ['name' => 'x']), [
+            'schema_version' => 1,
+            'kind' => 'laravel-flow',
+            'metadata' => [],
+            'nodes' => [
+                ['id' => 'a', 'type' => 'does.not.exist', 'config' => [], 'position' => ['x' => 0, 'y' => 0]],
+            ],
+            'connections' => [],
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJson(['success' => false]);
+        $response->assertJsonPath('data.violations.0', 'Unknown node type [does.not.exist] on node [a].');
     }
 
     private function registerDemoTrigger(): void

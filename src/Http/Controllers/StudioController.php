@@ -12,6 +12,7 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Padosoft\LaravelFlow\Contracts\DefinitionRepository;
+use Padosoft\LaravelFlow\Executor\DryRun\DryRunPlanner;
 use Padosoft\LaravelFlow\Graph\Exceptions\DefinitionLifecycleException;
 use Padosoft\LaravelFlow\Graph\Exceptions\DefinitionNotFoundException;
 use Padosoft\LaravelFlow\Graph\Exceptions\InvalidGraphException;
@@ -360,6 +361,55 @@ final class StudioController extends Controller
         }
 
         return response()->json($body, 500);
+    }
+
+    /**
+     * Statically plans the POSTed graph via core's `DryRunPlanner` and returns
+     * the Kahn-wave execution plan + cost estimate, executing NO handler and
+     * writing ZERO rows (by construction of the planner). Advisory only, so it
+     * needs no edit gate: the response is structural (node ids, wave grouping,
+     * cost dimensions), never node `config` — and the node types + `#[Cost]`
+     * hints it exposes are already public via the ungated `catalog()` endpoint.
+     * `DryRunPlanner` is method-injected from the container.
+     */
+    public function dryRun(Request $request, DryRunPlanner $planner, string $name): JsonResponse
+    {
+        /** @var array<string, mixed> $payload */
+        $payload = (array) $request->json()->all();
+
+        try {
+            $graph = $this->serializer->fromArray($payload);
+            // Semantic validation too (like storeDraft): GraphDefinition's
+            // constructor already rejects structural problems (cycles,
+            // connections to unknown nodes) inside fromArray(), but only
+            // GraphValidator catches an UNREGISTERED node type, an
+            // incompatible port-type wiring, or an unwired required input —
+            // any of which the planner would otherwise plan into a
+            // meaningless "trivially valid" result instead of a clear error.
+            $this->validator->validate($graph);
+        } catch (InvalidGraphException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The graph is invalid and cannot be planned.',
+                'data' => ['violations' => $e->violations()],
+            ], 422);
+        }
+
+        try {
+            $result = $planner->plan($graph);
+        } catch (Throwable $e) {
+            // An unexpected planner/container error must not fall through to
+            // Laravel's default (often HTML, debug-leaking) renderer. Sanitized
+            // JSON 500; log class + a redaction-safe detail only, never the raw
+            // message (the graph payload can carry node config).
+            return $this->repositoryFailure('dry-run', $name, $e);
+        }
+
+        return response()->json([
+            'flow' => $name,
+            'plan' => $result['plan']->toArray(),
+            'cost' => $result['cost']->toArray(),
+        ]);
     }
 
     /**

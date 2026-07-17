@@ -33,6 +33,7 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
         Route::get('/studio/{name}/version-list', [StudioController::class, 'versionList'])->name('studio.version-list');
         Route::get('/studio/{name}/diff', [StudioController::class, 'diff'])->name('studio.diff');
         Route::post('/studio/{name}/publish', [StudioController::class, 'publish'])->name('studio.publish');
+        Route::post('/studio/{name}/dry-run', [StudioController::class, 'dryRun'])->name('studio.dry-run');
         Route::get('/studio/{name}', [StudioController::class, 'show'])->name('studio.show');
         Route::get('/runs', [RunsController::class, 'index'])->name('runs.index');
         Route::get('/runs/{id}/monitor', [RunMonitorController::class, 'show'])->name('runs.monitor');

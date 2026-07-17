@@ -109,6 +109,21 @@ test.describe('flow-admin studio editor (E-PR3 canvas editor)', () => {
     await expect(page.getByTestId('studio-save-success')).toContainText('Draft version');
   });
 
+  test('dry run shows the execution-plan waves and cost estimate without saving', async ({ page }) => {
+    await page.goto('/flow/studio/OrderCheckoutFlow/edit');
+    await expect(page.getByTestId('studio-dry-run-button')).toBeEnabled();
+
+    await page.getByTestId('studio-dry-run-button').click();
+
+    // The fixture graph is a linear chain, so wave 0 holds its root node and
+    // the panel renders per-wave groups + a cost estimate.
+    await expect(page.getByTestId('studio-dry-run-panel')).toBeVisible();
+    await expect(page.getByTestId('dry-run-wave-0')).toContainText('start');
+    await expect(page.getByTestId('dry-run-cost-total')).toBeVisible();
+    // Dry run is advisory — it never persists a draft.
+    await expect(page.getByTestId('studio-save-success')).toHaveCount(0);
+  });
+
   test('deleting a node prunes its connected edges so the save succeeds cleanly', async ({ page, browserName }) => {
     // Regression test for a bug found in local Copilot review: deleting a
     // node used to leave its wire dangling in state (referencing a node id

@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useEffect, useMemo, useState } from 'react';
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ReactFlow,
@@ -466,8 +466,38 @@ function PaletteItem({ entry }) {
   );
 }
 
-function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
+// Serializes the live editor state into a GraphSerializer envelope. Throws
+// (SyntaxError) if a JSON-typed config field holds invalid JSON — callers
+// surface that as an editor error. Shared by save-as-draft and dry-run.
+function buildGraphPayload(nodes, edges) {
+  const graphNodes = nodes.map((node) => {
+    const config = { ...node.data.config };
+    node.data.inputs.forEach((port) => {
+      if (port.type === 'json' && typeof config[port.key] === 'string') {
+        config[port.key] = JSON.parse(config[port.key]);
+      }
+    });
+
+    return { id: node.id, type: node.data.nodeType, config, position: node.position };
+  });
+
+  const connections = edges.map((edge) => ({
+    sourceNodeId: edge.source,
+    sourcePortKey: edge.sourceHandle,
+    targetNodeId: edge.target,
+    targetPortKey: edge.targetHandle,
+  }));
+
+  return { schema_version: 1, kind: 'laravel-flow', metadata: {}, nodes: graphNodes, connections };
+}
+
+function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
   const [state, setState] = useState({ status: 'loading', nodes: [], edges: [], catalog: {} });
+  const [dryRun, setDryRun] = useState(null);
+  // Monotonic id so a slow dry-run response that resolves AFTER the graph was
+  // edited (which bumps this) is ignored instead of rendering a stale plan.
+  // Bumped by both onDryRun and every structural-edit handler below.
+  const dryRunReqRef = useRef(0);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [saveStatus, setSaveStatus] = useState({ kind: 'idle', message: '' });
   const { screenToFlowPosition } = useReactFlow();
@@ -528,6 +558,8 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
 
   const onConnect = useCallback(
     (params) => {
+      dryRunReqRef.current += 1;
+      setDryRun(null); // a new edge changes the execution plan — drop any stale one
       setState((current) => {
         const sourceNode = current.nodes.find((n) => n.id === params.source);
         const targetNode = current.nodes.find((n) => n.id === params.target);
@@ -549,6 +581,12 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
   );
 
   const onNodesChange = useCallback((changes) => {
+    // A node add/remove changes the plan; a pure position/selection change
+    // does not, so only clear a stale dry-run on structural changes.
+    if (changes.some((change) => change.type === 'remove' || change.type === 'add')) {
+      dryRunReqRef.current += 1;
+      setDryRun(null);
+    }
     setState((current) => {
       const nodes = applyNodeChanges(changes, current.nodes);
 
@@ -572,6 +610,10 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
   }, []);
 
   const onEdgesChange = useCallback((changes) => {
+    if (changes.some((change) => change.type === 'remove')) {
+      dryRunReqRef.current += 1;
+      setDryRun(null); // removing an edge changes the execution plan
+    }
     setState((current) => {
       const edges = applyEdgeChanges(changes, current.edges);
 
@@ -589,6 +631,9 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
       event.preventDefault();
       const type = event.dataTransfer.getData('application/flow-node-type');
       if (!type) return;
+
+      dryRunReqRef.current += 1;
+      setDryRun(null); // a new node changes the execution plan
 
       setState((current) => {
         const entry = current.catalog[type];
@@ -649,59 +694,76 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
   const onSave = useCallback(() => {
     setSaveStatus({ kind: 'saving', message: '' });
 
-    // Defense-in-depth: canSave already gates the button on !hasConfigError
-    // (computed via jsonFieldError, a SEPARATE try/catch'd JSON.parse over
-    // the same fields), so this should never throw in the normal flow —
-    // but the two checks are not literally the same call, so a future
+    // Defense-in-depth: canSave already gates the button on !hasConfigError,
+    // but the two JSON checks are not literally the same call, so a future
     // drift between them must not surface as an uncaught SyntaxError.
-    let nodes;
+    let payload;
     try {
-      nodes = state.nodes.map((node) => {
-        // Start from the full current config (preserves any key not backed
-        // by a declared input port — e.g. config set by another tool) and
-        // only convert the JSON-typed DECLARED ports, which the inspector
-        // stores as raw text while editing.
-        const config = { ...node.data.config };
-        node.data.inputs.forEach((port) => {
-          if (port.type === 'json' && typeof config[port.key] === 'string') {
-            config[port.key] = JSON.parse(config[port.key]);
-          }
-        });
-
-        return { id: node.id, type: node.data.nodeType, config, position: node.position };
-      });
+      payload = buildGraphPayload(state.nodes, state.edges);
     } catch {
       setSaveStatus({ kind: 'error', message: 'One or more config fields contain invalid JSON.' });
 
       return;
     }
 
-    const connections = state.edges.map((edge) => ({
-      sourceNodeId: edge.source,
-      sourcePortKey: edge.sourceHandle,
-      targetNodeId: edge.target,
-      targetPortKey: edge.targetHandle,
-    }));
-
     fetch(draftUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken() },
-      body: JSON.stringify({ schema_version: 1, kind: 'laravel-flow', metadata: {}, nodes, connections }),
+      body: JSON.stringify(payload),
     })
       .then(async (response) => {
-        const payload = await response.json();
+        const body = await response.json();
 
         if (!response.ok) {
-          const violations = payload.data?.violations;
-          setSaveStatus({ kind: 'error', message: violations ? `${payload.message} ${violations.join(' | ')}` : payload.message });
+          const violations = body.data?.violations;
+          setSaveStatus({ kind: 'error', message: violations ? `${body.message} ${violations.join(' | ')}` : body.message });
 
           return;
         }
 
-        setSaveStatus({ kind: 'success', message: payload.message });
+        setSaveStatus({ kind: 'success', message: body.message });
       })
       .catch(() => setSaveStatus({ kind: 'error', message: 'Network error while saving.' }));
   }, [state.nodes, state.edges, draftUrl]);
+
+  const onDryRun = useCallback(() => {
+    if (!dryRunUrl) return;
+
+    let payload;
+    try {
+      payload = buildGraphPayload(state.nodes, state.edges);
+    } catch {
+      setDryRun({ status: 'error', message: 'One or more config fields contain invalid JSON.' });
+
+      return;
+    }
+
+    const reqId = (dryRunReqRef.current += 1);
+    const isStale = () => dryRunReqRef.current !== reqId;
+
+    setDryRun({ status: 'planning' });
+    fetch(dryRunUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+      body: JSON.stringify(payload),
+    })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (isStale()) return; // the graph was edited (or re-planned) mid-flight
+
+        if (!response.ok) {
+          const violations = body.data?.violations;
+          setDryRun({ status: 'error', message: violations ? `${body.message} ${violations.join(' | ')}` : (body.message ?? 'Could not plan the graph.') });
+
+          return;
+        }
+
+        setDryRun({ status: 'ready', plan: body.plan, cost: body.cost });
+      })
+      .catch(() => {
+        if (!isStale()) setDryRun({ status: 'error', message: 'Network error while planning.' });
+      });
+  }, [state.nodes, state.edges, dryRunUrl]);
 
   if (state.status === 'loading') {
     return (
@@ -764,6 +826,16 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
           <button type="button" onClick={onSave} disabled={!canSave || saveStatus.kind === 'saving'} data-testid="studio-save-button">
             Save as draft
           </button>
+          {dryRunUrl ? (
+            <button
+              type="button"
+              onClick={onDryRun}
+              disabled={!(state.status === 'ready' || state.status === 'new') || dryRun?.status === 'planning'}
+              data-testid="studio-dry-run-button"
+            >
+              {dryRun?.status === 'planning' ? 'Planning…' : 'Dry run'}
+            </button>
+          ) : null}
           {hasInvalidWire && (
             <span className="field-error" data-testid="studio-invalid-wire-warning">
               Fix the invalid connection (shown in red) before saving.
@@ -778,6 +850,30 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl }) {
             </span>
           )}
         </div>
+        {dryRun?.status === 'error' ? (
+          <div className="field-error" data-testid="studio-dry-run-error" style={{ padding: '6px 10px' }}>{dryRun.message}</div>
+        ) : null}
+        {dryRun?.status === 'ready' ? (
+          <div
+            data-testid="studio-dry-run-panel"
+            style={{ padding: '10px 12px', border: '1px solid var(--border, #333)', borderRadius: 8, marginTop: 8, fontSize: 13 }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Execution plan</div>
+            <ol style={{ margin: '0 0 10px', paddingLeft: 18 }}>
+              {(dryRun.plan?.waves ?? []).map((wave, index) => (
+                <li key={index} data-testid={`dry-run-wave-${index}`}>
+                  Wave {index}: {wave.join(', ')}
+                </li>
+              ))}
+            </ol>
+            <div data-testid="dry-run-cost-total">
+              Estimated cost:{' '}
+              {Object.keys(dryRun.cost?.total ?? {}).length === 0
+                ? 'n/a'
+                : Object.entries(dryRun.cost.total).map(([dim, value]) => `${value} ${dim}`).join(' · ')}
+            </div>
+          </div>
+        ) : null}
       </div>
       <InspectorPanel node={selectedNode} onChangeConfig={onChangeConfig} onDeleteNode={onDeleteNode} />
     </div>
@@ -1090,14 +1186,14 @@ const mountPoint = document.getElementById('flow-studio-root');
 
 if (mountPoint) {
   const {
-    mode, graphUrl, flowName, editGraphUrl, catalogUrl, draftUrl,
+    mode, graphUrl, flowName, editGraphUrl, catalogUrl, draftUrl, dryRunUrl,
     versionListUrl, diffUrl, publishUrl, editUrl,
   } = mountPoint.dataset;
 
   createRoot(mountPoint).render(
     <StrictMode>
       {mode === 'edit' ? (
-        <StudioEditor flowName={flowName} editGraphUrl={editGraphUrl} catalogUrl={catalogUrl} draftUrl={draftUrl} />
+        <StudioEditor flowName={flowName} editGraphUrl={editGraphUrl} catalogUrl={catalogUrl} draftUrl={draftUrl} dryRunUrl={dryRunUrl} />
       ) : mode === 'versions' ? (
         <StudioVersions
           versionListUrl={versionListUrl}
