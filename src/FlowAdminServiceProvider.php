@@ -23,6 +23,8 @@ use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoNotifyNode;
 use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoTriggerNode;
 use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoValidateNode;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\AdminCssController;
+use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\MonitorJsController;
+use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\PackagedAssetController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\StudioCssController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\StudioJsController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\ThemeController;
@@ -227,7 +229,18 @@ class FlowAdminServiceProvider extends ServiceProvider
         Route::get('/_flow-admin/assets/studio.js', StudioJsController::class)
             ->name('flow-admin.assets.studio-js');
 
+        Route::get('/_flow-admin/assets/monitor.js', MonitorJsController::class)
+            ->name('flow-admin.assets.monitor-js');
+
         Route::get('/_flow-admin/assets/studio.css', StudioCssController::class)
             ->name('flow-admin.assets.studio-css');
+
+        // Catch-all for Vite's shared/hashed chunks (e.g. the React runtime
+        // chunk shared by the Studio and Monitor islands). Registered LAST so
+        // the named routes above win for their exact paths; the `{file}`
+        // constraint forbids slashes (no path traversal).
+        Route::get('/_flow-admin/assets/{file}', PackagedAssetController::class)
+            ->where('file', '[A-Za-z0-9._-]+')
+            ->name('flow-admin.assets.chunk');
     }
 }

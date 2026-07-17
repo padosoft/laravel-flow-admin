@@ -9,6 +9,7 @@ use Padosoft\LaravelFlowAdmin\Http\Controllers\DefinitionsController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\OutboxController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\OverviewController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\RunDetailController;
+use Padosoft\LaravelFlowAdmin\Http\Controllers\RunMonitorController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\RunsController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\SettingsController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\StudioController;
@@ -34,6 +35,8 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
         Route::post('/studio/{name}/publish', [StudioController::class, 'publish'])->name('studio.publish');
         Route::get('/studio/{name}', [StudioController::class, 'show'])->name('studio.show');
         Route::get('/runs', [RunsController::class, 'index'])->name('runs.index');
+        Route::get('/runs/{id}/monitor', [RunMonitorController::class, 'show'])->name('runs.monitor');
+        Route::get('/runs/{id}/monitor-state', [RunMonitorController::class, 'state'])->name('runs.monitor-state');
         Route::get('/runs/{id}', [RunDetailController::class, 'show'])->name('runs.show');
         Route::get('/approvals', [ApprovalsController::class, 'index'])->name('approvals.index');
         Route::get('/outbox', [OutboxController::class, 'index'])->name('outbox.index');

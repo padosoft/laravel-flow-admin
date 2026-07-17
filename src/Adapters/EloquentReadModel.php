@@ -745,6 +745,7 @@ final readonly class EloquentReadModel implements ReadModel
             attempts: 1,
             dependsOn: [],
             errorMessage: $step->errorMessage,
+            cacheHit: $step->cacheHit,
         );
     }
 
