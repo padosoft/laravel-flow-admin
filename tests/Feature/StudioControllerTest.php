@@ -370,23 +370,23 @@ final class StudioControllerTest extends TestCase
 
     public function test_dry_run_rejects_a_semantically_invalid_graph_with_422(): void
     {
-        // Structurally parseable but semantically invalid (a connection to a
-        // node that doesn't exist): must be caught by GraphValidator, not
-        // silently planned into an empty wave list.
-        $this->registerDemoTrigger();
-
+        // A node whose type is not registered parses fine (GraphSerializer /
+        // GraphDefinition are structural) but is rejected by GraphValidator —
+        // so this exercises dryRun()'s validate() call specifically, the layer
+        // GraphDefinition's own constructor does NOT cover.
         $response = $this->postJson(route('flow-admin.studio.dry-run', ['name' => 'x']), [
             'schema_version' => 1,
             'kind' => 'laravel-flow',
             'metadata' => [],
-            'nodes' => [$this->triggerNode('start')],
-            'connections' => [
-                ['sourceNodeId' => 'start', 'sourcePortKey' => 'out', 'targetNodeId' => 'ghost', 'targetPortKey' => 'in'],
+            'nodes' => [
+                ['id' => 'a', 'type' => 'does.not.exist', 'config' => [], 'position' => ['x' => 0, 'y' => 0]],
             ],
+            'connections' => [],
         ]);
 
         $response->assertStatus(422);
         $response->assertJson(['success' => false]);
+        $response->assertJsonPath('data.violations.0', 'Unknown node type [does.not.exist] on node [a].');
     }
 
     private function registerDemoTrigger(): void

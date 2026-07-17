@@ -379,11 +379,13 @@ final class StudioController extends Controller
 
         try {
             $graph = $this->serializer->fromArray($payload);
-            // Semantic validation too (like storeDraft): the planner's Kahn
-            // ordering silently returns an EMPTY wave list on a cycle while
-            // still summing per-node cost, which would render as a misleading
-            // "0 waves, non-zero cost" plan instead of a clear invalid-graph
-            // error — exactly the wrong signal for someone debugging a graph.
+            // Semantic validation too (like storeDraft): GraphDefinition's
+            // constructor already rejects structural problems (cycles,
+            // connections to unknown nodes) inside fromArray(), but only
+            // GraphValidator catches an UNREGISTERED node type, an
+            // incompatible port-type wiring, or an unwired required input —
+            // any of which the planner would otherwise plan into a
+            // meaningless "trivially valid" result instead of a clear error.
             $this->validator->validate($graph);
         } catch (InvalidGraphException $e) {
             return response()->json([
