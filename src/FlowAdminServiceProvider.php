@@ -14,6 +14,7 @@ use Padosoft\LaravelFlow\Dashboard\FlowDashboardReadModel;
 use Padosoft\LaravelFlow\Node\NodeRegistry;
 use Padosoft\LaravelFlowAdmin\Adapters\ArrayReadModel;
 use Padosoft\LaravelFlowAdmin\Adapters\EloquentReadModel;
+use Padosoft\LaravelFlowAdmin\Ai\FakeLlmClient;
 use Padosoft\LaravelFlowAdmin\Authorizers\AllowAllAuthorizer;
 use Padosoft\LaravelFlowAdmin\Authorizers\DenyAllAuthorizer;
 use Padosoft\LaravelFlowAdmin\Contracts\ActionAuthorizer;
@@ -28,6 +29,8 @@ use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\PackagedAssetController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\StudioCssController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\StudioJsController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\ThemeController;
+use Padosoft\LaravelFlowAI\Builder\FlowBuilderService;
+use Padosoft\LaravelFlowAI\Contracts\LlmClient;
 
 class FlowAdminServiceProvider extends ServiceProvider
 {
@@ -37,6 +40,12 @@ class FlowAdminServiceProvider extends ServiceProvider
             __DIR__ . '/../config/flow-admin.php',
             'flow-admin'
         );
+
+        // Dev/E2E-only: swap the AI pack's real (network) LLM client for a
+        // deterministic fake so the AI-builder flow can be exercised without
+        // a live model. Bound in boot() (below) so it wins over the AI
+        // provider's own binding regardless of provider registration order,
+        // and never in production. Opt-in via FLOW_ADMIN_FAKE_LLM=1.
 
         $this->app->singleton(FlowDashboardReadModel::class, function (): FlowDashboardReadModel {
             return new FlowDashboardReadModel;
@@ -94,6 +103,8 @@ class FlowAdminServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->bindFakeLlmClientIfOptedIn();
+
         $this->registerDemoNodesIfInDemoMode();
 
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'flow-admin');
@@ -189,6 +200,51 @@ class FlowAdminServiceProvider extends ServiceProvider
 
             $registry->register($handlerClass);
         }
+    }
+
+    /**
+     * Dev/E2E-only: replace the AI pack's real (network) {@see LlmClient}
+     * with the deterministic {@see FakeLlmClient} so the AI flow-builder can
+     * be exercised without a live model. Opt-in via `FLOW_ADMIN_FAKE_LLM=1`,
+     * the same posture as `FLOW_ADMIN_AUTHORIZER=allow`.
+     *
+     * Bound in boot() (not register()) so it wins over the AI provider's own
+     * `LlmClient` binding regardless of which provider registers last. Like
+     * the AllowAllAuthorizer guard, it refuses to take effect in the
+     * production environment even if the flag is mistakenly set there — a
+     * fake LLM silently answering real AI-builder requests would be worse
+     * than a hard failure.
+     */
+    private function bindFakeLlmClientIfOptedIn(): void
+    {
+        if (! (bool) $this->app->make('config')->get('flow-admin.ai.fake', false)) {
+            return;
+        }
+
+        if (! interface_exists(LlmClient::class)) {
+            return;
+        }
+
+        if ($this->app->environment('production')) {
+            Log::warning('laravel-flow-admin: FLOW_ADMIN_FAKE_LLM=1 is ignored in the production environment; the real LlmClient binding is kept.');
+
+            return;
+        }
+
+        $fake = static fn (): FakeLlmClient => new FakeLlmClient;
+
+        // The global singleton covers any consumer that resolves LlmClient
+        // directly. FlowBuilderService, however, has its OWN contextual
+        // binding in the AI pack's provider (a guarded, network-backed driver
+        // scoped to the 'ai.flow.builder' node identity), which would
+        // otherwise win over the global one for exactly the class the
+        // AI-builder endpoint uses — so override that contextual binding too.
+        // Set in boot(), it overwrites the AI provider's register()-time
+        // contextual binding (boot runs after every register()).
+        $this->app->singleton(LlmClient::class, $fake);
+        $this->app->when(FlowBuilderService::class)
+            ->needs(LlmClient::class)
+            ->give($fake);
     }
 
     /**

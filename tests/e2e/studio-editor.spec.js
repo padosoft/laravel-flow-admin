@@ -201,6 +201,57 @@ test.describe('flow-admin studio editor (E-PR3 canvas editor)', () => {
     await expect(page.getByTestId('studio-save-error')).not.toBeVisible();
   });
 
+  test('Build with AI generates a graph onto the canvas without persisting it', async ({ page }) => {
+    // The served app runs with FLOW_ADMIN_FAKE_LLM=1 (testbench.yaml), so the
+    // AI-builder is backed by the deterministic FakeLlmClient — it returns a
+    // single demo.trigger node the array adapter's registry accepts, so the
+    // server-side GraphValidator pass succeeds and the canvas replaces its
+    // content with the generated graph.
+    await page.goto('/flow/studio/OrderCheckoutFlow/edit');
+    await expect(page.locator('.react-flow__node')).toHaveCount(4);
+
+    const aiButton = page.getByTestId('studio-ai-build-button');
+    await expect(aiButton).toBeEnabled();
+    await aiButton.click();
+
+    const modal = page.getByTestId('ai-build-modal');
+    await expect(modal).toBeVisible();
+
+    await page.getByTestId('ai-build-prompt').fill('Start the order flow when a checkout happens.');
+    await page.getByTestId('ai-build-submit').click();
+
+    // Modal closes and the canvas now holds exactly the AI-generated node.
+    await expect(modal).toBeHidden();
+    await expect(page.getByTestId('studio-node-ai_generated')).toBeVisible();
+    await expect(page.locator('.react-flow__node')).toHaveCount(1);
+
+    // The generated graph is valid, so Save re-enables — but the AI-builder
+    // itself persisted nothing (no draft-saved confirmation appeared).
+    await expect(page.getByTestId('studio-save-button')).toBeEnabled();
+    await expect(page.getByTestId('studio-save-success')).toHaveCount(0);
+  });
+
+  test('Build with AI can be cancelled without touching the canvas', async ({ page }) => {
+    await page.goto('/flow/studio/OrderCheckoutFlow/edit');
+    await expect(page.locator('.react-flow__node')).toHaveCount(4);
+
+    await page.getByTestId('studio-ai-build-button').click();
+    await expect(page.getByTestId('ai-build-modal')).toBeVisible();
+
+    await page.getByTestId('ai-build-cancel').click();
+    await expect(page.getByTestId('ai-build-modal')).toBeHidden();
+    // The canvas is untouched — still the original 4 fixture nodes.
+    await expect(page.locator('.react-flow__node')).toHaveCount(4);
+
+    // Escape also closes the dialog (keyboard escape hatch).
+    await page.getByTestId('studio-ai-build-button').click();
+    await expect(page.getByTestId('ai-build-modal')).toBeVisible();
+    await page.getByTestId('ai-build-prompt').focus();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('ai-build-modal')).toBeHidden();
+    await expect(page.locator('.react-flow__node')).toHaveCount(4);
+  });
+
   test('the read-only canvas links into the editor', async ({ page }) => {
     await page.goto('/flow/studio/OrderCheckoutFlow');
 

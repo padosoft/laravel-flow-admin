@@ -43,6 +43,13 @@ jobs:
           ref: main
           path: padosoft-laravel-flow
 
+      - name: Checkout padosoft/laravel-flow-ai (path-repo sibling)
+        uses: actions/checkout@v6
+        with:
+          repository: padosoft/laravel-flow-ai
+          ref: main
+          path: laravel-flow-ai
+
       - name: Setup PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@v2
         with:
@@ -187,6 +194,13 @@ jobs:
           repository: padosoft/laravel-flow
           ref: main
           path: padosoft-laravel-flow
+
+      - name: Checkout padosoft/laravel-flow-ai (path-repo sibling)
+        uses: actions/checkout@v6
+        with:
+          repository: padosoft/laravel-flow-ai
+          ref: main
+          path: laravel-flow-ai
 
       - name: Detect manifests
         id: pkg

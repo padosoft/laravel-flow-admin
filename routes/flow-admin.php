@@ -34,6 +34,30 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
         Route::get('/studio/{name}/diff', [StudioController::class, 'diff'])->name('studio.diff');
         Route::post('/studio/{name}/publish', [StudioController::class, 'publish'])->name('studio.publish');
         Route::post('/studio/{name}/dry-run', [StudioController::class, 'dryRun'])->name('studio.dry-run');
+        // Registered UNCONDITIONALLY even though padosoft/laravel-flow-ai is
+        // optional: gating the route on class_exists() would 404 at the router
+        // (before auth) when the pack is absent vs 403 when present, leaking
+        // package-presence to unauthenticated callers — the exact oracle the
+        // controller avoids by doing its class_exists() 404 INSIDE the
+        // edit_definition gate (so unauthorized callers always get a uniform
+        // 403, and only an AUTHORIZED caller sees the 404 when the pack is
+        // missing). The class_exists-gated AI features are the UI affordance
+        // (data-ai-build-url) and the container binding, not the route itself.
+        //
+        // Rate-limited on TOP of the edit_definition gate: unlike the other
+        // Studio mutations (free, local DB writes), each ai-build call spends a
+        // billable third-party LLM request, so an authorized-but-careless (or
+        // compromised) operator could otherwise run up cost. 12/min per user is
+        // generous for interactive authoring yet caps runaway/scripted spend.
+        // The 3rd `throttle` arg is a KEY PREFIX (see ThrottleRequests::handle
+        // — `$prefix.$signature`): without it the bare `throttle:12,1` bucket
+        // is keyed only by domain+IP/user and would be SHARED with any other
+        // bare-throttled route in the host app, so unrelated traffic could
+        // starve (or be starved by) this AI cost budget. A dedicated prefix
+        // isolates it.
+        Route::post('/studio/{name}/ai-build', [StudioController::class, 'aiBuild'])
+            ->middleware('throttle:12,1,flow-admin-ai-build')
+            ->name('studio.ai-build');
         Route::get('/studio/{name}', [StudioController::class, 'show'])->name('studio.show');
         Route::get('/runs', [RunsController::class, 'index'])->name('runs.index');
         Route::get('/runs/{id}/monitor', [RunMonitorController::class, 'show'])->name('runs.monitor');

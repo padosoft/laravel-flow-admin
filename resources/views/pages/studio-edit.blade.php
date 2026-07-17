@@ -22,6 +22,9 @@
             data-catalog-url="{{ route('flow-admin.studio.catalog') }}"
             data-draft-url="{{ route('flow-admin.studio.draft', ['name' => $flowName]) }}"
             data-dry-run-url="{{ route('flow-admin.studio.dry-run', ['name' => $flowName]) }}"
+            @if ($aiBuilderAvailable)
+                data-ai-build-url="{{ route('flow-admin.studio.ai-build', ['name' => $flowName]) }}"
+            @endif
             style="width: 100%; height: 70vh;"
         ></div>
     </div>

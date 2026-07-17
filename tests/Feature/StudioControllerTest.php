@@ -9,11 +9,16 @@ use Padosoft\LaravelFlow\Contracts\DefinitionRepository;
 use Padosoft\LaravelFlow\Graph\GraphSerializer;
 use Padosoft\LaravelFlow\Graph\StoredDefinition;
 use Padosoft\LaravelFlow\Node\NodeRegistry;
+use Padosoft\LaravelFlowAdmin\Ai\FakeLlmClient;
 use Padosoft\LaravelFlowAdmin\Contracts\ActionAuthorizer;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
 use Padosoft\LaravelFlowAdmin\Tests\Concerns\MigratesFlowTables;
 use Padosoft\LaravelFlowAdmin\Tests\Stubs\DemoTriggerNode;
 use Padosoft\LaravelFlowAdmin\Tests\TestCase;
+use Padosoft\LaravelFlowAI\Builder\FlowBuilderService;
+use Padosoft\LaravelFlowAI\Contracts\LlmClient;
+use Padosoft\LaravelFlowAI\Llm\LlmRequest;
+use Padosoft\LaravelFlowAI\Llm\LlmResponse;
 use RuntimeException;
 
 /**
@@ -47,7 +52,7 @@ final class StudioControllerTest extends TestCase
         $configuredMiddleware = config('flow-admin.middleware', ['web', 'auth']);
         $routes = collect($this->app['router']->getRoutes()->getRoutes());
 
-        foreach (['flow-admin.studio.show', 'flow-admin.studio.graph', 'flow-admin.studio.catalog', 'flow-admin.studio.edit', 'flow-admin.studio.edit-graph', 'flow-admin.studio.draft', 'flow-admin.studio.versions', 'flow-admin.studio.version-list', 'flow-admin.studio.diff', 'flow-admin.studio.publish', 'flow-admin.studio.dry-run'] as $routeName) {
+        foreach (['flow-admin.studio.show', 'flow-admin.studio.graph', 'flow-admin.studio.catalog', 'flow-admin.studio.edit', 'flow-admin.studio.edit-graph', 'flow-admin.studio.draft', 'flow-admin.studio.versions', 'flow-admin.studio.version-list', 'flow-admin.studio.diff', 'flow-admin.studio.publish', 'flow-admin.studio.dry-run', 'flow-admin.studio.ai-build'] as $routeName) {
             $route = $routes->first(fn ($route) => $route->getName() === $routeName);
 
             $this->assertNotNull($route, "Route [{$routeName}] must be registered");
@@ -387,6 +392,135 @@ final class StudioControllerTest extends TestCase
         $response->assertStatus(422);
         $response->assertJson(['success' => false]);
         $response->assertJsonPath('data.violations.0', 'Unknown node type [does.not.exist] on node [a].');
+    }
+
+    public function test_ai_build_endpoint_is_forbidden_by_default(): void
+    {
+        // Same deny-by-default authoring gate as edit-graph/draft — the
+        // AI-builder both reveals graph structure and spends a billable model
+        // call, so it must never be reachable under DenyAllAuthorizer.
+        $response = $this->postJson(route('flow-admin.studio.ai-build', ['name' => 'any-flow']), [
+            'prompt' => 'build me a flow',
+        ]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_ai_build_endpoint_generates_a_valid_graph_without_persisting_it(): void
+    {
+        $this->setUpFlowDatabase();
+        $this->bindAllowingAuthorizer();
+        $this->registerDemoTrigger();
+        // The fake model returns a single-node graph using the registered
+        // test node type, so FlowBuilderService's GraphValidator pass accepts
+        // it and the endpoint returns a real serialized envelope.
+        $this->bindBuilderClientReturning('test.studio.demo-trigger');
+
+        $response = $this->postJson(route('flow-admin.studio.ai-build', ['name' => 'ai-flow']), [
+            'prompt' => 'When an order is placed, kick off the flow.',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson(['success' => true]);
+        $response->assertJsonPath('graph.schema_version', 1);
+        $response->assertJsonPath('graph.kind', 'laravel-flow');
+        $response->assertJsonPath('graph.nodes.0.type', 'test.studio.demo-trigger');
+
+        // The AI-builder proposes; it never writes. No draft version exists.
+        $this->assertCount(0, $this->app->make(DefinitionRepository::class)->versions('ai-flow'));
+    }
+
+    public function test_ai_build_endpoint_returns_422_when_the_model_produces_an_invalid_graph(): void
+    {
+        $this->bindAllowingAuthorizer();
+        // An UNREGISTERED node type parses structurally but fails core's
+        // GraphValidator inside FlowBuilderService::build(), which returns a
+        // typed failure the endpoint surfaces as 422 + concrete violations.
+        $this->bindBuilderClientReturning('does.not.exist');
+
+        $response = $this->postJson(route('flow-admin.studio.ai-build', ['name' => 'ai-flow']), [
+            'prompt' => 'produce something invalid',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJson(['success' => false]);
+        $response->assertJsonPath('data.violations.0', 'Unknown node type [does.not.exist] on node [ai_generated].');
+    }
+
+    public function test_ai_build_endpoint_validates_the_prompt(): void
+    {
+        $this->bindAllowingAuthorizer();
+
+        $response = $this->postJson(route('flow-admin.studio.ai-build', ['name' => 'ai-flow']), [
+            'prompt' => '',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('prompt');
+
+        // A whitespace-only prompt must also be rejected (min:3 counts raw
+        // length, so the trimmed-minimum rule is what catches "   ") — never
+        // reaching the billable model call.
+        $whitespace = $this->postJson(route('flow-admin.studio.ai-build', ['name' => 'ai-flow']), [
+            'prompt' => '   ',
+        ]);
+
+        $whitespace->assertStatus(422);
+        $whitespace->assertJsonValidationErrors('prompt');
+    }
+
+    public function test_ai_build_endpoint_returns_a_sanitized_500_when_the_model_client_throws(): void
+    {
+        $this->bindAllowingAuthorizer();
+        $this->registerDemoTrigger();
+
+        // A real LLM client can throw on transport/API errors (build() only
+        // catches PolicyDeniedException). The endpoint must translate that
+        // into a sanitized 500, never leak the raw message.
+        $this->app->when(FlowBuilderService::class)
+            ->needs(LlmClient::class)
+            ->give(static fn (): LlmClient => new class implements LlmClient
+            {
+                public function complete(LlmRequest $request): LlmResponse
+                {
+                    throw new RuntimeException('provider secret leaked here');
+                }
+            });
+
+        $response = $this->postJson(route('flow-admin.studio.ai-build', ['name' => 'ai-flow']), [
+            'prompt' => 'anything',
+        ]);
+
+        $response->assertStatus(500);
+        $response->assertJson(['success' => false]);
+        $this->assertStringNotContainsString('provider secret', (string) $response->getContent());
+    }
+
+    public function test_ai_build_endpoint_is_rate_limited(): void
+    {
+        $this->setUpFlowDatabase();
+        $this->bindAllowingAuthorizer();
+        $this->registerDemoTrigger();
+        $this->bindBuilderClientReturning('test.studio.demo-trigger');
+
+        $route = route('flow-admin.studio.ai-build', ['name' => 'ai-flow']);
+
+        // throttle:12,1 — the billable endpoint caps at 12 calls/minute. The
+        // first 12 pass; the 13th in the same window is rejected with 429.
+        // (The array cache wired in TestCase persists across calls within this
+        // one test, so the limiter actually accumulates.)
+        for ($i = 0; $i < 12; $i++) {
+            $this->postJson($route, ['prompt' => 'build a flow please'])->assertStatus(200);
+        }
+
+        $this->postJson($route, ['prompt' => 'build a flow please'])->assertStatus(429);
+    }
+
+    private function bindBuilderClientReturning(string $nodeType): void
+    {
+        $this->app->when(FlowBuilderService::class)
+            ->needs(LlmClient::class)
+            ->give(static fn (): FakeLlmClient => new FakeLlmClient($nodeType));
     }
 
     private function registerDemoTrigger(): void

@@ -5,6 +5,22 @@
 
 ---
 
+## 2026-07-17 — E-PR8a (AI Flow Builder): overriding a dependency's binding must account for CONTEXTUAL bindings, and the env-gate must live in config for larastan
+
+### A global `singleton()`/`bind()` override does NOT reach a `when($class)->needs($abstract)->give()` contextual binding
+
+To let the admin's Studio exercise the AI flow builder without a live model, we swap `padosoft/laravel-flow-ai`'s real (network) `LlmClient` for a deterministic `FakeLlmClient`. The obvious `$app->singleton(LlmClient::class, fn () => new FakeLlmClient)` looked sufficient — but `FlowBuilderService` never resolved the fake. The AI pack registers a **contextual** binding, `when(FlowBuilderService::class)->needs(LlmClient::class)->give(<guarded network client scoped to the 'ai.flow.builder' node identity>)`, and Laravel's container resolves a contextual binding **before** any global binding for the same abstract. So the class we most needed to fake kept getting the real client. **How to apply:** when you override a third-party binding that the third party ALSO binds contextually per-consumer, override BOTH — the global `singleton`/`bind` AND the matching `when($theirConsumer)->needs($abstract)->give($yourFake)`. Grep the dependency's service provider for `->when(` / `->needs(` before assuming a global override wins. Do the override in **`boot()`**, not `register()`: boot runs after every provider's `register()`, so your `give()` overwrites theirs regardless of provider load order (a fresh app has no deterministic register order across packages).
+
+### Env-gated behavior belongs in `config/*.php`, read via `config()`; larastan forbids `env()` elsewhere
+
+The fake-LLM opt-in was first written as `filter_var(env('FLOW_ADMIN_FAKE_LLM', …), FILTER_VALIDATE_BOOLEAN)` inside the provider — PHPStan (larastan `noEnvCallsOutsideOfConfig`) failed it: `env()` returns `null` once `config:cache` has run, so any `env()` call outside the `config/` directory is a production-time footgun. **How to apply:** put the `env()` read in `config/flow-admin.php` (`'ai' => ['fake' => filter_var(env('FLOW_ADMIN_FAKE_LLM', false), FILTER_VALIDATE_BOOLEAN)]`) and have the provider read `config('flow-admin.ai.fake')`. Bonus: this mirrors the existing `FLOW_ADMIN_AUTHORIZER` → `AllowAllAuthorizer` pattern, including the **production refusal** — a dev/E2E-only client (fake LLM, allow-all authorizer) must hard-refuse in `app()->environment('production')` even if the flag is mistakenly set there, because a fake silently answering real requests is worse than a hard failure.
+
+### A dev/E2E fake driven through `testbench.yaml`'s `env:` needs the same production guard the config has
+
+The "Build with AI" E2E runs the served app with `FLOW_ADMIN_FAKE_LLM: true` in `testbench.yaml`'s `env:` block (the only runtime knob the `testbench serve` grandchild actually reads — see the 2026-07-16 lesson). Because that same YAML would be a footgun if copied toward production, the provider's `app()->environment('production')` refusal is what makes shipping the flag safe. The fake returns a single node whose `type` the array adapter registers (`demo.trigger`), so the server-side `GraphValidator` pass inside `FlowBuilderService::build()` accepts it and the endpoint returns a real, loadable envelope — pick your fake's fixture to satisfy the REAL validator, not to bypass it.
+
+---
+
 ## 2026-07-16 — E-PR3 (canvas editor): the `testbench serve` app silently used `testing`/`:memory:` (not the migrated file) on CI; plus the diagnostic that proved it, and a stray NUL byte
 
 ### When a `testbench serve` E2E write is green locally but red in CI with "no such table", the served app is on a DIFFERENT DB connection than the migration ran against

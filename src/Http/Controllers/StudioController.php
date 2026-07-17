@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelFlowAdmin\Http\Controllers;
 
+use Closure;
 use DateTimeInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -23,6 +24,7 @@ use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
 use Padosoft\LaravelFlowAdmin\Support\Authorize;
 use Padosoft\LaravelFlowAdmin\Support\GraphRedactor;
 use Padosoft\LaravelFlowAdmin\ViewModels\DefinitionRow;
+use Padosoft\LaravelFlowAI\Builder\FlowBuilderService;
 use Throwable;
 
 final class StudioController extends Controller
@@ -111,6 +113,11 @@ final class StudioController extends Controller
             ],
             'counts' => $this->counts(),
             'flowName' => $name,
+            // The "Build with AI" panel is only wired when the optional
+            // padosoft/laravel-flow-ai package is installed — the view omits
+            // the data-ai-build-url attribute otherwise, so the React island
+            // simply doesn't render the AI button.
+            'aiBuilderAvailable' => class_exists(FlowBuilderService::class),
         ]);
     }
 
@@ -410,6 +417,143 @@ final class StudioController extends Controller
             'plan' => $result['plan']->toArray(),
             'cost' => $result['cost']->toArray(),
         ]);
+    }
+
+    /**
+     * Turns a natural-language prompt into a VALIDATED draft graph via
+     * padosoft/laravel-flow-ai's {@see FlowBuilderService}, and returns the
+     * serialized envelope for the editor to load onto the canvas — it does
+     * NOT persist anything. The operator reviews the proposal and then saves
+     * it through the existing (separately-gated) `storeDraft()` flow, so the
+     * AI never writes a definition on its own.
+     *
+     * Gated by `ActionAuthorizer::canEditDefinition()` — same authoring
+     * boundary as editing/saving a draft, and it consumes a (billable) model
+     * call. `FlowBuilderService::build()` already runs the result through
+     * core's `GraphValidator`, so a model that hallucinates an invalid graph
+     * surfaces here as a typed 422 with the concrete violations, never a
+     * broken draft. The service is resolved from the container (not
+     * method-injected) behind a class_exists() guard so the endpoint degrades
+     * to a clean 404 if the optional AI package is absent, rather than a
+     * container resolution error.
+     */
+    public function aiBuild(Request $request, string $name): JsonResponse
+    {
+        return Authorize::action(
+            'edit_definition',
+            function () use ($request, $name): JsonResponse {
+                // Checked INSIDE the authorization gate (not before it) so an
+                // unauthorized caller always gets a uniform 403 regardless of
+                // whether the optional AI package is installed — otherwise the
+                // 404-vs-403 split would leak package-presence to anyone, a
+                // feature-detection oracle on an otherwise deny-by-default
+                // surface.
+                if (! class_exists(FlowBuilderService::class)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The AI flow builder is not available (padosoft/laravel-flow-ai is not installed).',
+                    ], 404);
+                }
+
+                $validated = $request->validate([
+                    'prompt' => [
+                        'required', 'string', 'max:4000',
+                        // Trimmed minimum: a plain `min:3` counts RAW length, so
+                        // a whitespace-only prompt ("   ") would pass and still
+                        // spend a billable model call. Enforce ≥3 non-whitespace
+                        // characters server-side, independent of the UI trim.
+                        static function (string $attribute, mixed $value, Closure $fail): void {
+                            if (! is_string($value) || mb_strlen(trim($value)) < 3) {
+                                $fail('The prompt must contain at least 3 non-whitespace characters.');
+                            }
+                        },
+                    ],
+                ]);
+
+                // Send the trimmed prompt to the builder — leading/trailing
+                // whitespace carries no intent and would only pad the model call.
+                $prompt = trim((string) $validated['prompt']);
+                // The model is an OPERATOR cost/policy decision, taken from
+                // config only — deliberately NOT client-supplied, so an actor
+                // with edit rights cannot force an arbitrary/most-expensive
+                // model past the configured default and run up spend.
+                $model = (string) config('flow-admin.ai.model', 'claude-sonnet-5');
+
+                try {
+                    // Resolve INSIDE the try: the AI pack builds FlowBuilderService
+                    // through a guarded LLM client whose construction can itself
+                    // throw (e.g. a malformed provider base_url in config), and
+                    // that would otherwise escape before build() and bypass this
+                    // sanitized 500 into Laravel's default exception response.
+                    /** @var FlowBuilderService $builder */
+                    $builder = app(FlowBuilderService::class);
+                    $result = $builder->build($prompt, $model);
+                } catch (Throwable $e) {
+                    // A real LLM client can throw on transport/API errors
+                    // (build() only catches PolicyDeniedException internally).
+                    // Never leak the raw message — it can echo the prompt or
+                    // provider internals. Sanitized 500, class-only log.
+                    // Log the flow name (route param) for triage, but NEVER
+                    // the exception message or the prompt — either can carry
+                    // provider internals or user input.
+                    Log::warning('laravel-flow-admin: AI flow builder failed', [
+                        'name' => $name,
+                        'exception' => $e::class,
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The AI builder could not complete. Try again.',
+                    ], 500);
+                }
+
+                // A real null-check (not just !success) narrows $result->graph
+                // from ?GraphDefinition to GraphDefinition for the serializer —
+                // success() always carries a graph and failed() never does, but
+                // checking the property directly keeps that invariant explicit.
+                if (! $result->success || $result->graph === null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The AI could not produce a valid graph from that prompt.',
+                        // These are usually GraphValidator strings (short, safe —
+                        // same as /draft surfaces), but the AI pack also folds a
+                        // guardrail PolicyDeniedException message into this list,
+                        // which originates outside this package. Bound count +
+                        // length defensively so a future guardrail change can't
+                        // dump large/leaky text straight to the browser.
+                        'data' => ['violations' => $this->boundViolations($result->errors)],
+                    ], 422);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Draft graph generated. Review it, then save it as a draft.',
+                    'graph' => $this->serializer->toArray($result->graph),
+                ]);
+            },
+            context: ['flowName' => $name],
+        );
+    }
+
+    /**
+     * Defensive bound on the validation reasons returned to the browser from
+     * the AI builder: at most 20 entries, each truncated to 300 chars. The
+     * GraphValidator strings these normally carry are already short; the cap
+     * exists so a future guardrail-layer message (folded into the same list
+     * by the AI pack, outside this package's control) can never dump large or
+     * leaky text to the client unbounded.
+     *
+     * @param  list<string>  $violations
+     * @return list<string>
+     */
+    private function boundViolations(array $violations): array
+    {
+        return array_map(
+            static fn (string $violation): string => mb_strlen($violation) > 300
+                ? mb_substr($violation, 0, 300) . '…'
+                : $violation,
+            array_slice(array_values($violations), 0, 20),
+        );
     }
 
     /**
