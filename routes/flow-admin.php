@@ -14,6 +14,7 @@ use Padosoft\LaravelFlowAdmin\Http\Controllers\RunsController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\SettingsController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\StudioController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\ThemeController;
+use Padosoft\LaravelFlowAI\Builder\FlowBuilderService;
 
 Route::prefix(config('flow-admin.prefix', 'flow'))
     ->middleware(config('flow-admin.middleware', ['web', 'auth']))
@@ -34,20 +35,30 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
         Route::get('/studio/{name}/diff', [StudioController::class, 'diff'])->name('studio.diff');
         Route::post('/studio/{name}/publish', [StudioController::class, 'publish'])->name('studio.publish');
         Route::post('/studio/{name}/dry-run', [StudioController::class, 'dryRun'])->name('studio.dry-run');
-        // Rate-limited on TOP of the edit_definition gate: unlike the other
-        // Studio mutations (free, local DB writes), each ai-build call spends a
-        // billable third-party LLM request, so an authorized-but-careless (or
-        // compromised) operator could otherwise run up cost. 12/min per user is
-        // generous for interactive authoring yet caps runaway/scripted spend.
-        // The 3rd `throttle` arg is a KEY PREFIX (see ThrottleRequests::handle
-        // — `$prefix.$signature`): without it the bare `throttle:12,1` bucket
-        // is keyed only by domain+IP/user and would be SHARED with any other
-        // bare-throttled route in the host app, so unrelated traffic could
-        // starve (or be starved by) this AI cost budget. A dedicated prefix
-        // isolates it.
-        Route::post('/studio/{name}/ai-build', [StudioController::class, 'aiBuild'])
-            ->middleware('throttle:12,1,flow-admin-ai-build')
-            ->name('studio.ai-build');
+        // The AI-builder route is registered ONLY when the optional
+        // padosoft/laravel-flow-ai package is installed — per AGENTS.md, "gate
+        // any AI feature (UI, route, binding) behind class_exists(...)". In a
+        // host app without the pack the named endpoint never appears in
+        // route:list/route cache at all (the controller's own class_exists
+        // guard remains as belt-and-suspenders for a registered-but-unresolvable
+        // edge). The edit view only emits data-ai-build-url under the same
+        // condition, so it never route()s a missing name.
+        if (class_exists(FlowBuilderService::class)) {
+            // Rate-limited on TOP of the edit_definition gate: unlike the other
+            // Studio mutations (free, local DB writes), each ai-build call spends a
+            // billable third-party LLM request, so an authorized-but-careless (or
+            // compromised) operator could otherwise run up cost. 12/min per user is
+            // generous for interactive authoring yet caps runaway/scripted spend.
+            // The 3rd `throttle` arg is a KEY PREFIX (see ThrottleRequests::handle
+            // — `$prefix.$signature`): without it the bare `throttle:12,1` bucket
+            // is keyed only by domain+IP/user and would be SHARED with any other
+            // bare-throttled route in the host app, so unrelated traffic could
+            // starve (or be starved by) this AI cost budget. A dedicated prefix
+            // isolates it.
+            Route::post('/studio/{name}/ai-build', [StudioController::class, 'aiBuild'])
+                ->middleware('throttle:12,1,flow-admin-ai-build')
+                ->name('studio.ai-build');
+        }
         Route::get('/studio/{name}', [StudioController::class, 'show'])->name('studio.show');
         Route::get('/runs', [RunsController::class, 'index'])->name('runs.index');
         Route::get('/runs/{id}/monitor', [RunMonitorController::class, 'show'])->name('runs.monitor');

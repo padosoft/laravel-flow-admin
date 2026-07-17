@@ -465,10 +465,14 @@ final class StudioController extends Controller
                 // model past the configured default and run up spend.
                 $model = (string) config('flow-admin.ai.model', 'claude-sonnet-5');
 
-                /** @var FlowBuilderService $builder */
-                $builder = app(FlowBuilderService::class);
-
                 try {
+                    // Resolve INSIDE the try: the AI pack builds FlowBuilderService
+                    // through a guarded LLM client whose construction can itself
+                    // throw (e.g. a malformed provider base_url in config), and
+                    // that would otherwise escape before build() and bypass this
+                    // sanitized 500 into Laravel's default exception response.
+                    /** @var FlowBuilderService $builder */
+                    $builder = app(FlowBuilderService::class);
                     $result = $builder->build($prompt, $model);
                 } catch (Throwable $e) {
                     // A real LLM client can throw on transport/API errors
