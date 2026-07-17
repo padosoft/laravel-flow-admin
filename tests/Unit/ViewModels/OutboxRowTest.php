@@ -86,11 +86,15 @@ final class OutboxRowTest extends TestCase
         return [
             'canonical positive int' => ['7', true],
             'multi-digit canonical' => ['1024', true],
+            'max route length (18 digits)' => ['999999999999999999', true],
             'leading zero' => ['007', false],
             'zero' => ['0', false],
             'negative' => ['-5', false],
             'non-numeric' => ['outbox_abc', false],
             'empty' => ['', false],
+            // 19 digits: canonical + in-range for int, but exceeds the route's
+            // [0-9]{1,18} cap, so the button must not render (it would 404).
+            '19 digits exceeds route cap' => ['1000000000000000000', false],
         ];
     }
 

@@ -65,8 +65,9 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
         Route::get('/runs/{id}/monitor-state', [RunMonitorController::class, 'state'])->name('runs.monitor-state');
         // Mutation endpoints (E-PR6) — each wraps a core FlowEngine seam in
         // Support\Authorize::action (deny-by-default) and returns the uniform
-        // {success,message,data} JSON contract. Registered before the /runs/{id}
-        // catch-all GET so the /cancel and /replay suffixes are not swallowed.
+        // {success,message,data} JSON contract. Grouped with the run routes;
+        // ordering vs the GET /runs/{id} route is irrelevant here since these
+        // are POST and route matching is HTTP-method specific.
         Route::post('/runs/{id}/cancel', [RunDetailController::class, 'cancel'])->name('runs.cancel');
         Route::post('/runs/{id}/replay', [RunDetailController::class, 'replay'])->name('runs.replay');
         Route::get('/runs/{id}', [RunDetailController::class, 'show'])->name('runs.show');
