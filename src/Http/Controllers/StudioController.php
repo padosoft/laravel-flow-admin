@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelFlowAdmin\Http\Controllers;
 
+use Closure;
 use DateTimeInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -455,10 +456,23 @@ final class StudioController extends Controller
                 }
 
                 $validated = $request->validate([
-                    'prompt' => 'required|string|min:3|max:4000',
+                    'prompt' => [
+                        'required', 'string', 'max:4000',
+                        // Trimmed minimum: a plain `min:3` counts RAW length, so
+                        // a whitespace-only prompt ("   ") would pass and still
+                        // spend a billable model call. Enforce ≥3 non-whitespace
+                        // characters server-side, independent of the UI trim.
+                        static function (string $attribute, mixed $value, Closure $fail): void {
+                            if (! is_string($value) || mb_strlen(trim($value)) < 3) {
+                                $fail('The prompt must contain at least 3 non-whitespace characters.');
+                            }
+                        },
+                    ],
                 ]);
 
-                $prompt = (string) $validated['prompt'];
+                // Send the trimmed prompt to the builder — leading/trailing
+                // whitespace carries no intent and would only pad the model call.
+                $prompt = trim((string) $validated['prompt']);
                 // The model is an OPERATOR cost/policy decision, taken from
                 // config only — deliberately NOT client-supplied, so an actor
                 // with edit rights cannot force an arbitrary/most-expensive

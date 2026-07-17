@@ -442,13 +442,13 @@ Every push runs through this gate (matrix `php: 8.3, 8.4` × `laravel: 13`):
 composer validate --strict --no-check-publish
 composer format:test          # Laravel Pint
 composer analyse              # PHPStan / Larastan level 8
-composer test                 # PHPUnit — 175 tests, 918 assertions
+composer test                 # PHPUnit — 175 tests, 921 assertions
 npm run lint                  # ESLint flat config
 npm run build                 # Vite build verification
 npm run test:e2e              # Playwright on chromium + firefox + webkit
 ```
 
-Latest local run: **175 tests / 918 assertions / 72 E2E runs passed** (26 Playwright scenarios × 3 browsers, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser limitations on one node-deletion scenario).
+Latest local run: **175 tests / 921 assertions / 72 E2E runs passed** (26 Playwright scenarios × 3 browsers, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser limitations on one node-deletion scenario).
 
 ---
 

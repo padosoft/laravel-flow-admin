@@ -457,6 +457,16 @@ final class StudioControllerTest extends TestCase
 
         $response->assertStatus(422);
         $response->assertJsonValidationErrors('prompt');
+
+        // A whitespace-only prompt must also be rejected (min:3 counts raw
+        // length, so the trimmed-minimum rule is what catches "   ") — never
+        // reaching the billable model call.
+        $whitespace = $this->postJson(route('flow-admin.studio.ai-build', ['name' => 'ai-flow']), [
+            'prompt' => '   ',
+        ]);
+
+        $whitespace->assertStatus(422);
+        $whitespace->assertJsonValidationErrors('prompt');
     }
 
     public function test_ai_build_endpoint_returns_a_sanitized_500_when_the_model_client_throws(): void
