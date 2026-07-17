@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useEffect, useMemo, useState } from 'react';
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ReactFlow,
@@ -494,6 +494,10 @@ function buildGraphPayload(nodes, edges) {
 function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
   const [state, setState] = useState({ status: 'loading', nodes: [], edges: [], catalog: {} });
   const [dryRun, setDryRun] = useState(null);
+  // Monotonic id so a slow dry-run response that resolves AFTER the graph was
+  // edited (which bumps this) is ignored instead of rendering a stale plan.
+  // Bumped by both onDryRun and every structural-edit handler below.
+  const dryRunReqRef = useRef(0);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [saveStatus, setSaveStatus] = useState({ kind: 'idle', message: '' });
   const { screenToFlowPosition } = useReactFlow();
@@ -554,6 +558,7 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
 
   const onConnect = useCallback(
     (params) => {
+      dryRunReqRef.current += 1;
       setDryRun(null); // a new edge changes the execution plan — drop any stale one
       setState((current) => {
         const sourceNode = current.nodes.find((n) => n.id === params.source);
@@ -579,6 +584,7 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
     // A node add/remove changes the plan; a pure position/selection change
     // does not, so only clear a stale dry-run on structural changes.
     if (changes.some((change) => change.type === 'remove' || change.type === 'add')) {
+      dryRunReqRef.current += 1;
       setDryRun(null);
     }
     setState((current) => {
@@ -605,6 +611,7 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
 
   const onEdgesChange = useCallback((changes) => {
     if (changes.some((change) => change.type === 'remove')) {
+      dryRunReqRef.current += 1;
       setDryRun(null); // removing an edge changes the execution plan
     }
     setState((current) => {
@@ -625,6 +632,7 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
       const type = event.dataTransfer.getData('application/flow-node-type');
       if (!type) return;
 
+      dryRunReqRef.current += 1;
       setDryRun(null); // a new node changes the execution plan
 
       setState((current) => {
@@ -730,6 +738,9 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
       return;
     }
 
+    const reqId = (dryRunReqRef.current += 1);
+    const isStale = () => dryRunReqRef.current !== reqId;
+
     setDryRun({ status: 'planning' });
     fetch(dryRunUrl, {
       method: 'POST',
@@ -738,6 +749,7 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
     })
       .then(async (response) => {
         const body = await response.json().catch(() => ({}));
+        if (isStale()) return; // the graph was edited (or re-planned) mid-flight
 
         if (!response.ok) {
           const violations = body.data?.violations;
@@ -748,7 +760,9 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
 
         setDryRun({ status: 'ready', plan: body.plan, cost: body.cost });
       })
-      .catch(() => setDryRun({ status: 'error', message: 'Network error while planning.' }));
+      .catch(() => {
+        if (!isStale()) setDryRun({ status: 'error', message: 'Network error while planning.' });
+      });
   }, [state.nodes, state.edges, dryRunUrl]);
 
   if (state.status === 'loading') {

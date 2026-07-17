@@ -395,7 +395,15 @@ final class StudioController extends Controller
             ], 422);
         }
 
-        $result = $planner->plan($graph);
+        try {
+            $result = $planner->plan($graph);
+        } catch (Throwable $e) {
+            // An unexpected planner/container error must not fall through to
+            // Laravel's default (often HTML, debug-leaking) renderer. Sanitized
+            // JSON 500; log class + a redaction-safe detail only, never the raw
+            // message (the graph payload can carry node config).
+            return $this->repositoryFailure('dry-run', $name, $e);
+        }
 
         return response()->json([
             'flow' => $name,
