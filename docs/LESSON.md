@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-07-17 — E-PR8b (Advisor inbox): a dependency that can't auto-wire needs its provider registered in the served testbench app
+
+### `app(SomeClass::class)` 500s with `BindingResolutionException` when the class has non-injectable constructor params AND its provider isn't loaded
+
+`padosoft/laravel-flow-ai`'s `FlowAdvisor` has a constructor of `(FlowDashboardReadModel, DefinitionRepository, array $analyzers, array $exposedFlowNames, ?PayloadRedactor, int $sampleSize)`. The two `array` params and the `int` have no container binding, so the container cannot **auto-wire** it — it resolves ONLY through the explicit `bind(FlowAdvisor::class, …)` in the AI pack's own service provider. This bit us because the earlier E-PR8a "Build with AI" feature worked in the served E2E app WITHOUT that provider being loaded: `FlowBuilderService` (its sibling) auto-wires fine (all its deps — `LlmClient`, `NodeRegistry`, `GraphValidator` — are bound), so we'd wrongly concluded the AI provider was active. It wasn't. `app(FlowAdvisor::class)` then threw `BindingResolutionException` (a sanitized 500 in the endpoint), and the advisor E2E failed. **How to apply:** before assuming a package's classes are resolvable in the `testbench serve` app, check whether the specific class AUTO-WIRES (all ctor params bound) or needs its provider. Orchestra Testbench's served app does NOT pick up a path-repo sibling's `extra.laravel.providers` auto-discovery the way a real consumer app does — so any optional package whose bindings you rely on at runtime must be listed EXPLICITLY in `testbench.yaml`'s `providers:` block. A real consumer `composer require`ing the package gets it via auto-discovery; the served E2E app does not. (The `laravel.log` dumped by the E2E failure step — see the 2026-07-16 lesson — is what surfaced the exception class immediately.)
+
+### Registering the optional pack's provider does not undo an admin-side binding override
+
+Adding `LaravelFlowAIServiceProvider` to `testbench.yaml` re-introduces the AI pack's own `LlmClient` bindings (global + the `FlowBuilderService` contextual one). The admin's dev/E2E `FakeLlmClient` override still wins because it is bound in the admin provider's **`boot()`**, which runs after every provider's `register()` — verified by re-running the full chromium E2E suite (all green, the "Build with AI" happy path still uses the fake). When you add a provider that competes for a binding you override, re-run the E2E that depends on the override, don't assume.
+
 ## 2026-07-17 — E-PR8a (AI Flow Builder): overriding a dependency's binding must account for CONTEXTUAL bindings, and the env-gate must live in config for larastan
 
 ### A global `singleton()`/`bind()` override does NOT reach a `when($class)->needs($abstract)->give()` contextual binding

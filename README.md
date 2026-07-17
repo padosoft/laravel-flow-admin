@@ -9,7 +9,7 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![PHP Version](https://img.shields.io/packagist/php-v/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![Laravel](https://img.shields.io/badge/Laravel-%5E13.0-ff2d20?style=flat-square&logo=laravel)](https://laravel.com)
-[![Tests](https://img.shields.io/badge/tests-175%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
+[![Tests](https://img.shields.io/badge/tests-180%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![E2E](https://img.shields.io/badge/playwright-chromium%20%7C%20firefox%20%7C%20webkit-45ba4b?style=flat-square&logo=playwright)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%208-brightgreen?style=flat-square)](https://phpstan.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-pint-7e22ce?style=flat-square)](https://laravel.com/docs/pint)
@@ -80,12 +80,13 @@
 - 📡 **Live run monitor** — a per-run page that subscribes to core's private broadcast channel (`node.transitioned` / `run.progress`) via Laravel Echo when broadcasting is enabled, or **falls back to polling** when it isn't. Renders all nine real `NodeState` colors plus a separate ⚡ cache-hit badge on succeeded nodes, with a live progress header. The polled state endpoint carries node states only — never the run's payloads.
 - 🧪 **Dry-run planner** — a **Dry run** button on the Studio editor statically plans the current graph via core's `DryRunPlanner` (Kahn-wave execution order + a per-node/total cost estimate) and renders the wave plan + cost, executing **no** handler and writing **zero** rows.
 - 🤖 **Build with AI** — a **Build with AI** panel on the Studio editor turns a natural-language prompt into an **already-validated** draft graph via [`padosoft/laravel-flow-ai`](https://github.com/padosoft/laravel-flow-ai)'s `FlowBuilderService` (the model picks only from your real node catalog; the result runs through core's `GraphValidator` server-side before it ever reaches the browser). The graph is loaded onto the canvas for you to review and edit — **nothing is persisted** until you click *Save as draft*. Gated by `ActionAuthorizer::canEditDefinition()`; optional (only shown when the AI package is installed).
+- 🧭 **Flow Advisor inbox** — a **deterministic** advisor (no AI model) scans your flows' run history via [`padosoft/laravel-flow-ai`](https://github.com/padosoft/laravel-flow-ai)'s `FlowAdvisor` and surfaces reliability/performance suggestions (failure hotspots, duration outliers, repeated segments, unused tools). Each suggestion is saved as a **draft version** (never published) you review and publish from the flow's Versions page. Scanning is a gated, rate-limited mutation (`ActionAuthorizer::canEditDefinition()`); optional (only shown when the AI package is installed).
 - ⚡ **⌘K command palette** — jump anywhere in two keystrokes.
 - 🎨 **Pixel-perfect dark + light themes** — persisted in cookie, switchable per user.
 - 🛡️ **Deny-by-default authorizer** — every mutation goes through your `ActionAuthorizer`. No accidents.
 - 🔁 **Auto-refreshing pages** — configurable polling (`/flow/api/live`).
 - 🧱 **Adapter pattern** — `eloquent` for prod, `array` for demos / E2E (deterministic seed-42 fixtures).
-- 🧪 **Battle-tested** — 175 PHPUnit tests, 26 Playwright scenarios (78 runs across Chromium / Firefox / WebKit — 72 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario).
+- 🧪 **Battle-tested** — 180 PHPUnit tests, 28 Playwright scenarios (84 runs across Chromium / Firefox / WebKit — 78 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario).
 - 📦 **Zero-coupling** — built on a public `Contracts\*` surface; engine internals stay `@internal`.
 
 ---
@@ -363,6 +364,8 @@ All routes live under the configured prefix (default `/flow`) and the `flow-admi
 | `GET` | `/runs` | `flow-admin.runs.index` | Runs list |
 | `GET` | `/runs/{id}` | `flow-admin.runs.show` | Run detail + timeline |
 | `GET` | `/approvals` | `flow-admin.approvals.index` | Approvals inbox |
+| `GET` | `/advisor` | `flow-admin.advisor.index` | Flow Advisor inbox (scan affordance) |
+| `POST` | `/advisor/scan` | `flow-admin.advisor.scan` | Runs the deterministic `FlowAdvisor` across flows; persists a draft version per suggestion (never publishes), returns the findings — gated by `ActionAuthorizer::canEditDefinition()` + rate-limited; 404 when the AI package is absent |
 | `GET` | `/outbox` | `flow-admin.outbox.index` | Webhook outbox |
 | `GET` | `/definitions` | `flow-admin.definitions.index` | Registered flows |
 | `GET` | `/settings` | `flow-admin.settings.index` | Effective configuration |
@@ -415,7 +418,7 @@ If you build with Claude Code or another agent, copy `.claude/` into your downst
 
 | Tool | Workflow runs lifecycle | Approvals UI | Webhook outbox | Visual flow editor | Drop-in for Laravel Flow |
 | --- | :---: | :---: | :---: | :---: | :---: |
-| **Laravel Flow Admin** | ✅ | ✅ | ✅ | ✅ drag & drop, typed-connection validation, save-as-draft, dry-run planner, **natural-language "Build with AI"** | ✅ |
+| **Laravel Flow Admin** | ✅ | ✅ | ✅ | ✅ drag & drop, typed-connection validation, save-as-draft, dry-run planner, **natural-language "Build with AI"**, **deterministic history advisor** | ✅ |
 | Laravel Horizon | ⚠️ queue/job only | ❌ | ❌ | ❌ | ❌ |
 | Laravel Pulse | ⚠️ app metrics | ❌ | ❌ | ❌ | ❌ |
 | Custom dashboard | depends | depends | depends | depends | ⏳ slow to bootstrap |
@@ -442,13 +445,13 @@ Every push runs through this gate (matrix `php: 8.3, 8.4` × `laravel: 13`):
 composer validate --strict --no-check-publish
 composer format:test          # Laravel Pint
 composer analyse              # PHPStan / Larastan level 8
-composer test                 # PHPUnit — 175 tests, 921 assertions
+composer test                 # PHPUnit — 180 tests, 945 assertions
 npm run lint                  # ESLint flat config
 npm run build                 # Vite build verification
 npm run test:e2e              # Playwright on chromium + firefox + webkit
 ```
 
-Latest local run: **175 tests / 921 assertions / 72 E2E runs passed** (26 Playwright scenarios × 3 browsers, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser limitations on one node-deletion scenario).
+Latest local run: **180 tests / 945 assertions / 78 E2E runs passed** (28 Playwright scenarios × 3 browsers, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser limitations on one node-deletion scenario).
 
 ---
 

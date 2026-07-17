@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Route;
+use Padosoft\LaravelFlowAdmin\Http\Controllers\AdvisorController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\ApiController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\ApprovalsController;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\DefinitionsController;
@@ -64,6 +65,14 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
         Route::get('/runs/{id}/monitor-state', [RunMonitorController::class, 'state'])->name('runs.monitor-state');
         Route::get('/runs/{id}', [RunDetailController::class, 'show'])->name('runs.show');
         Route::get('/approvals', [ApprovalsController::class, 'index'])->name('approvals.index');
+        Route::get('/advisor', [AdvisorController::class, 'index'])->name('advisor.index');
+        // Registered unconditionally (no package-presence oracle — the
+        // controller does its class_exists() 404 INSIDE the edit_definition
+        // gate, same posture as studio.ai-build). Throttled: a scan reads run
+        // history and can WRITE several draft versions via FlowAdvisor.
+        Route::post('/advisor/scan', [AdvisorController::class, 'scan'])
+            ->middleware('throttle:6,1,flow-admin-advisor-scan')
+            ->name('advisor.scan');
         Route::get('/outbox', [OutboxController::class, 'index'])->name('outbox.index');
         Route::get('/definitions', [DefinitionsController::class, 'index'])->name('definitions.index');
         Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
