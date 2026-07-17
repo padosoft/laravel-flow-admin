@@ -75,12 +75,30 @@ final class OutboxRowTest extends TestCase
         $this->assertSame($expected, OutboxRow::fromDto($dto)->canRedeliver);
     }
 
-    public function test_can_redeliver_is_false_for_a_failed_row_with_a_non_numeric_id(): void
+    /**
+     * @return array<string, array{0: string, 1: bool}>
+     */
+    public static function canonicalIdProvider(): array
     {
-        // A failed row whose id isn't numeric would render a Redeliver button
-        // that 404s against the whereNumber route — so it must be gated off.
+        // canRedeliver must mirror the controller's canonical-id guard so the
+        // button never renders for a failed row whose id the /redeliver route +
+        // round-trip guard would reject with a 404.
+        return [
+            'canonical positive int' => ['7', true],
+            'multi-digit canonical' => ['1024', true],
+            'leading zero' => ['007', false],
+            'zero' => ['0', false],
+            'negative' => ['-5', false],
+            'non-numeric' => ['outbox_abc', false],
+            'empty' => ['', false],
+        ];
+    }
+
+    #[DataProvider('canonicalIdProvider')]
+    public function test_can_redeliver_requires_a_canonical_numeric_id_on_a_failed_row(string $id, bool $expected): void
+    {
         $dto = new OutboxEntry(
-            id: 'outbox_abc',
+            id: $id,
             eventType: 'run.succeeded',
             destination: 'https://hooks.example.test/wh',
             status: 'failed',
@@ -89,7 +107,7 @@ final class OutboxRowTest extends TestCase
             lastError: null,
         );
 
-        $this->assertFalse(OutboxRow::fromDto($dto)->canRedeliver);
+        $this->assertSame($expected, OutboxRow::fromDto($dto)->canRedeliver);
     }
 
     public function test_status_label_uses_format_helper(): void
