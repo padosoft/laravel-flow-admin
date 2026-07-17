@@ -438,16 +438,22 @@ final class StudioController extends Controller
      */
     public function aiBuild(Request $request, string $name): JsonResponse
     {
-        if (! class_exists(FlowBuilderService::class)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'The AI flow builder is not available (padosoft/laravel-flow-ai is not installed).',
-            ], 404);
-        }
-
         return Authorize::action(
             'edit_definition',
             function () use ($request): JsonResponse {
+                // Checked INSIDE the authorization gate (not before it) so an
+                // unauthorized caller always gets a uniform 403 regardless of
+                // whether the optional AI package is installed — otherwise the
+                // 404-vs-403 split would leak package-presence to anyone, a
+                // feature-detection oracle on an otherwise deny-by-default
+                // surface.
+                if (! class_exists(FlowBuilderService::class)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The AI flow builder is not available (padosoft/laravel-flow-ai is not installed).',
+                    ], 404);
+                }
+
                 $validated = $request->validate([
                     'prompt' => 'required|string|min:3|max:4000',
                 ]);

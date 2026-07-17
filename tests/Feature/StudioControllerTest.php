@@ -486,6 +486,26 @@ final class StudioControllerTest extends TestCase
         $this->assertStringNotContainsString('provider secret', (string) $response->getContent());
     }
 
+    public function test_ai_build_endpoint_is_rate_limited(): void
+    {
+        $this->setUpFlowDatabase();
+        $this->bindAllowingAuthorizer();
+        $this->registerDemoTrigger();
+        $this->bindBuilderClientReturning('test.studio.demo-trigger');
+
+        $route = route('flow-admin.studio.ai-build', ['name' => 'ai-flow']);
+
+        // throttle:12,1 — the billable endpoint caps at 12 calls/minute. The
+        // first 12 pass; the 13th in the same window is rejected with 429.
+        // (The array cache wired in TestCase persists across calls within this
+        // one test, so the limiter actually accumulates.)
+        for ($i = 0; $i < 12; $i++) {
+            $this->postJson($route, ['prompt' => 'build a flow please'])->assertStatus(200);
+        }
+
+        $this->postJson($route, ['prompt' => 'build a flow please'])->assertStatus(429);
+    }
+
     private function bindBuilderClientReturning(string $nodeType): void
     {
         $this->app->when(FlowBuilderService::class)
