@@ -104,9 +104,12 @@
                 return wrap;
             };
 
-            const renderCard = (s) => {
+            const renderCard = (s, index) => {
                 const li = el('li', 'advisor-card');
-                li.dataset.testid = `advisor-card-${s.flow}`;
+                // Include the index: FlowAdvisor can return several suggestions
+                // for the SAME flow (one per analyzer finding), so keying the
+                // testid on flow name alone would collide.
+                li.dataset.testid = `advisor-card-${s.flow}-${index}`;
 
                 const head = el('div', 'advisor-card-head');
                 head.append(el('b', null, s.flow));
@@ -122,7 +125,7 @@
                 const actions = el('div', 'advisor-card-actions');
                 const link = el('a', 'btn sm', `Review draft v${s.draft_version}`);
                 link.href = versionsUrlFor(s.flow);
-                link.dataset.testid = `advisor-view-draft-${s.flow}`;
+                link.dataset.testid = `advisor-view-draft-${s.flow}-${index}`;
                 actions.append(link);
                 li.append(actions);
 
