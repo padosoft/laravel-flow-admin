@@ -64,7 +64,11 @@ final class AdvisorController extends Controller
             function (): JsonResponse {
                 // Inside the auth gate (uniform 403 regardless of package
                 // presence — the route is registered unconditionally, same
-                // no-oracle posture as the ai-build endpoint).
+                // no-oracle posture as the ai-build endpoint). This branch is
+                // defensive and not unit-tested: padosoft/laravel-flow-ai is a
+                // require-dev dep so the class is ALWAYS present in the CI/test
+                // matrix, and class_exists() can't be faked — the "pack absent"
+                // path is only reachable in a real host that omits the pack.
                 if (! class_exists(FlowAdvisor::class)) {
                     return response()->json([
                         'success' => false,
@@ -138,20 +142,30 @@ final class AdvisorController extends Controller
         $bounded = [];
 
         foreach (array_slice($rationale, 0, 20, true) as $key => $value) {
-            $bounded[$key] = $this->boundValue($value);
+            $bounded[$key] = $this->boundValue($value, 1);
         }
 
         return $bounded;
     }
 
-    private function boundValue(mixed $value): mixed
+    private function boundValue(mixed $value, int $depth): mixed
     {
         if (is_string($value)) {
             return mb_strlen($value) > 300 ? mb_substr($value, 0, 300) . '…' : $value;
         }
 
         if (is_array($value)) {
-            return array_map($this->boundValue(...), array_slice($value, 0, 20, true));
+            // Depth cap: `Analyzer` is a pluggable @api interface, so a
+            // pathological (or self-referential) third-party rationale payload
+            // must not exhaust the stack — only breadth was bounded before.
+            if ($depth >= 4) {
+                return '[…]';
+            }
+
+            return array_map(
+                fn (mixed $item): mixed => $this->boundValue($item, $depth + 1),
+                array_slice($value, 0, 20, true),
+            );
         }
 
         return $value;

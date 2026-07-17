@@ -62,6 +62,14 @@ interface ActionAuthorizer
      * admin-package-local, same as {@see self::canCancelRun()} and
      * {@see self::canRetryWebhook()}.
      *
+     * IMPORTANT — empty `$flowName`: the Flow Advisor scan
+     * (`POST /advisor/scan`) authorizes an ALL-FLOWS action, so it calls this
+     * with `$flowName === ''` (there is no single flow to name). A host
+     * authorizer that scopes editing per-flow/per-tenant MUST special-case the
+     * empty string deliberately — do NOT treat `''` as an unscoped allow.
+     * Return `true` only if the actor may edit definitions across every flow
+     * the scan could touch; return `false` to deny the scan entirely.
+     *
      * @param  array<string, mixed>|null  $actor
      */
     public function canEditDefinition(string $flowName, ?array $actor): bool;

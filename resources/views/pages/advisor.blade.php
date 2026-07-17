@@ -67,8 +67,18 @@
                 if (el) el.hidden = !on;
             };
             const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content ?? '';
-            const versionsUrlFor = (flow) =>
-                @json(route('flow-admin.studio.versions', ['name' => '__FLOW__'])).replace('__FLOW__', encodeURIComponent(flow));
+            // Split the versions-route template around the name segment in PHP
+            // (build time) so the URL is assembled by concatenation, never by a
+            // runtime String.replace that could collide with a flow literally
+            // named after the placeholder token.
+            @php
+                [$versionsPrefix, $versionsSuffix] = explode(
+                    'FLOW_NAME_PLACEHOLDER',
+                    route('flow-admin.studio.versions', ['name' => 'FLOW_NAME_PLACEHOLDER']),
+                    2,
+                );
+            @endphp
+            const versionsUrlFor = (flow) => @json($versionsPrefix) + encodeURIComponent(flow) + @json($versionsSuffix);
 
             // Pure DOM construction (no innerHTML): every value is
             // user/analyzer-derived, so building nodes with textContent keeps
@@ -127,6 +137,14 @@
             };
 
             button.addEventListener('click', async () => {
+                // Explicit confirmation (rule-admin-ajax-pattern): a scan runs
+                // across every flow and can WRITE a new draft version per flow
+                // with a finding, so it isn't a free read — make the operator
+                // opt in rather than firing on a single click.
+                if (!window.confirm('Scan all flows for suggestions? Each flow with a suggestion gets a new draft version (never published) you can review and publish.')) {
+                    return;
+                }
+
                 button.disabled = true;
                 setStatus('');
                 show('advisor-initial', false);

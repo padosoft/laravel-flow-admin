@@ -18,6 +18,9 @@ test.describe('flow-admin Advisor inbox (E-PR8b)', () => {
     await page.goto('/flow/advisor');
     await expect(page.getByTestId('advisor-scan-button')).toBeVisible();
 
+    // Scanning confirms first (window.confirm) — Playwright auto-dismisses
+    // unhandled dialogs, which would cancel the scan, so accept it explicitly.
+    page.once('dialog', (dialog) => dialog.accept());
     await page.getByTestId('advisor-scan-button').click();
 
     // The served E2E app (array adapter) has no persisted run history, so the

@@ -1064,14 +1064,14 @@ button { background: transparent; border: 0; padding: 0; cursor: pointer; }
 .advisor-card-head b { font-size: 13px; }
 .advisor-draft { color: var(--text-tertiary); font-size: 11.5px; }
 .advisor-summary { margin: 0; font-size: 12.5px; color: var(--text-secondary); }
+/* Flat (no nested card): a left accent + subtle inset, not a bordered box,
+   to respect the "no nested cards" UI rule inside .card > .advisor-card. */
 .advisor-rationale {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-subtle, var(--bg-hover));
+  padding: 6px 0 6px 10px;
+  border-left: 2px solid var(--border);
 }
 .advisor-rationale-row {
   display: grid;
