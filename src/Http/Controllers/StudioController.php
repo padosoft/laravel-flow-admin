@@ -441,7 +441,7 @@ final class StudioController extends Controller
     {
         return Authorize::action(
             'edit_definition',
-            function () use ($request): JsonResponse {
+            function () use ($request, $name): JsonResponse {
                 // Checked INSIDE the authorization gate (not before it) so an
                 // unauthorized caller always gets a uniform 403 regardless of
                 // whether the optional AI package is installed — otherwise the
@@ -493,7 +493,11 @@ final class StudioController extends Controller
                     // (build() only catches PolicyDeniedException internally).
                     // Never leak the raw message — it can echo the prompt or
                     // provider internals. Sanitized 500, class-only log.
+                    // Log the flow name (route param) for triage, but NEVER
+                    // the exception message or the prompt — either can carry
+                    // provider internals or user input.
                     Log::warning('laravel-flow-admin: AI flow builder failed', [
+                        'name' => $name,
                         'exception' => $e::class,
                     ]);
 
