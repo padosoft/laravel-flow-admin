@@ -69,6 +69,19 @@ final class OutboxController extends Controller
     {
         $outboxId = (int) $id;
 
+        // Guard the int cast: reject any param that doesn't round-trip back to
+        // the exact URL segment (a leading-zero form, or — belt-and-suspenders
+        // with the route's length cap — an overflowing digit string), so the
+        // authorizer and engine can never act on a different row than the URL
+        // names. A malformed id is a client error, resolved before authorizing.
+        if ((string) $outboxId !== $id || $outboxId < 1) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid webhook id.',
+                'data' => [],
+            ], 404);
+        }
+
         return Authorize::action(
             'retry_webhook',
             fn (): JsonResponse => FlowMutation::run(function () use ($outboxId): string {

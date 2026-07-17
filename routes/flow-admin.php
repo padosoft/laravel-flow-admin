@@ -80,8 +80,11 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
             ->where('tokenHash', '[A-Fa-f0-9]{64}')->name('approvals.approve');
         Route::post('/approvals/{tokenHash}/reject', [ApprovalsController::class, 'reject'])
             ->where('tokenHash', '[A-Fa-f0-9]{64}')->name('approvals.reject');
+        // {id} bounded to 1–18 digits: an outbox id is an integer PK, and
+        // capping the length keeps `(int)` casts safely below PHP_INT_MAX so a
+        // pathological long digit string can't overflow into a different row.
         Route::post('/outbox/{id}/redeliver', [OutboxController::class, 'redeliver'])
-            ->whereNumber('id')->name('outbox.redeliver');
+            ->where('id', '[0-9]{1,18}')->name('outbox.redeliver');
         Route::get('/advisor', [AdvisorController::class, 'index'])->name('advisor.index');
         // Registered unconditionally (no package-presence oracle — the
         // controller does its class_exists() 404 INSIDE the edit_definition

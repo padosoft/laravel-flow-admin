@@ -43,6 +43,17 @@ final class FlowMutationTest extends TestCase
         );
     }
 
+    public function test_an_array_result_without_a_message_key_fails_closed_with_500(): void
+    {
+        // A callback that returns a malformed success payload (no `message`) is
+        // a programming error — it must not escape the uniform envelope.
+        $response = FlowMutation::run(fn (): array => ['data' => ['x' => 1]]);
+
+        $this->assertSame(500, $response->getStatusCode());
+        $this->assertFalse($response->getData(true)['success']);
+        $this->assertSame('Something went wrong. Try again.', $response->getData(true)['message']);
+    }
+
     public function test_flow_input_exception_maps_to_422_and_surfaces_its_message(): void
     {
         $response = FlowMutation::run(function (): string {

@@ -49,8 +49,13 @@ use Throwable;
 final class FlowMutation
 {
     /**
-     * @param  callable(): (string|array{message: string, data?: array<string, mixed>})  $operation
-     *                                                                                               Returns either a success message, or a `['message' => ..., 'data' => ...]` pair.
+     * @param  callable(): (string|array<string, mixed>)  $operation
+     *                                                                Returns either a success message string,
+     *                                                                or a `['message' => string, 'data' => array]`
+     *                                                                pair. The array shape is validated at runtime
+     *                                                                (a malformed payload fails closed with a 500)
+     *                                                                rather than pinned in the type, so the guard
+     *                                                                below is genuinely reachable.
      */
     public static function run(callable $operation, int $successStatus = 200): JsonResponse
     {
@@ -70,8 +75,24 @@ final class FlowMutation
             return self::fail('Something went wrong. Try again.', 500);
         }
 
-        $message = is_array($result) ? $result['message'] : $result;
-        $data = is_array($result) ? ($result['data'] ?? []) : [];
+        if (is_array($result)) {
+            $message = $result['message'] ?? null;
+            $data = $result['data'] ?? [];
+
+            // A callback that returns an array MUST carry a string `message`
+            // and (if present) an array `data`. A malformed payload is a
+            // programming error, not a client one — fail closed with a
+            // sanitized 500 rather than letting an undefined-key access or a
+            // type error escape the uniform envelope into a framework error page.
+            if (! is_string($message) || ! is_array($data)) {
+                Log::warning('laravel-flow-admin: a flow mutation returned a malformed success payload');
+
+                return self::fail('Something went wrong. Try again.', 500);
+            }
+        } else {
+            $message = $result;
+            $data = [];
+        }
 
         return response()->json([
             'success' => true,

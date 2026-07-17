@@ -52,6 +52,19 @@ final class OutboxMutationTest extends MutationTestCase
         $this->assertSame('delivered', DB::table('flow_webhook_outbox')->where('id', $id)->value('status'));
     }
 
+    public function test_redeliver_with_a_non_canonical_id_returns_404(): void
+    {
+        $this->allowAllActions();
+
+        // A leading-zero id doesn't round-trip through the (int) cast, so the
+        // controller rejects it before authorizing/acting — it can't silently
+        // resolve to a different row than the URL segment names.
+        $response = $this->postJson(route('flow-admin.outbox.redeliver', ['id' => '007']));
+
+        $response->assertStatus(404);
+        $response->assertJsonPath('success', false);
+    }
+
     private function seedOutboxRow(string $status, int $attempts): int
     {
         $now = now();
