@@ -93,8 +93,9 @@ return [
     | The Studio editor's "Build with AI" panel calls padosoft/laravel-flow-ai's
     | FlowBuilderService to turn a natural-language prompt into a VALIDATED draft
     | graph the operator reviews before saving. The panel is only offered when
-    | that optional package is installed; this section only supplies the default
-    | model when a request omits one.
+    | that optional package is installed. `model` is an OPERATOR setting only —
+    | the ai-build endpoint never accepts a client-supplied model, so this value
+    | is always the one used (a request cannot override it).
     |
     | FLOW_ADMIN_FAKE_LLM=1 swaps the real (network) LLM client for a
     | deterministic fake — dev/E2E only, never production (see
