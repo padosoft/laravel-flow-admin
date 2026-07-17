@@ -11,6 +11,21 @@
                 <a href="{{ route('flow-admin.runs.monitor', ['id' => $viewModel->summary->id]) }}" class="btn" data-testid="run-monitor-link">
                     Live monitor
                 </a>
+                @if ($viewModel->canCancel())
+                    <button class="btn danger" type="button"
+                        data-flow-action
+                        data-testid="run-cancel"
+                        data-action-url="{{ route('flow-admin.runs.cancel', ['id' => $viewModel->summary->id]) }}"
+                        data-confirm="Cancel this run? Active steps will be stopped."
+                        data-busy-label="Cancelling…">Cancel</button>
+                @endif
+                @if ($viewModel->canReplay())
+                    <button class="btn" type="button"
+                        data-flow-action
+                        data-testid="run-replay"
+                        data-action-url="{{ route('flow-admin.runs.replay', ['id' => $viewModel->summary->id]) }}"
+                        data-busy-label="Replaying…">Replay</button>
+                @endif
                 <x-flow-admin::status-badge :status="$viewModel->summary->status" :label="$viewModel->summary->statusLabel" />
             </div>
         </div>
@@ -69,4 +84,6 @@
             </div>
         </div>
     </div>
+
+    @include('flow-admin::partials.action-runner')
 @endsection

@@ -715,6 +715,9 @@ final readonly class EloquentReadModel implements ReadModel
             requestedAt: $approval->issuedAt ?? new DateTimeImmutable,
             approver: $this->extractActor($approval->actor ?? []),
             decidedAt: $approval->decidedAt,
+            // The token HASH (not the plaintext token) — the key the dashboard
+            // authorizes on and passes to Flow::resumeByHash()/rejectByHash().
+            tokenHash: $approval->tokenHash,
         );
     }
 

@@ -24,7 +24,20 @@ final readonly class ApprovalCard
         public ?string $approver,
         public \DateTimeImmutable $requestedAt,
         public ?\DateTimeImmutable $decidedAt,
+        // SHA-256 token hash the approve/reject actions post to the server;
+        // null when unknown (a pending row with no hash cannot be acted on).
+        public ?string $tokenHash = null,
     ) {}
+
+    /**
+     * Whether the approve/reject action buttons can be wired for this card:
+     * only while the approval is still pending AND the adapter surfaced a
+     * token hash (the key `Flow::resumeByHash()`/`rejectByHash()` require).
+     */
+    public function canDecide(): bool
+    {
+        return $this->isPending && $this->tokenHash !== null && $this->tokenHash !== '';
+    }
 
     public static function fromDto(ApprovalSummary $dto): self
     {
@@ -39,6 +52,7 @@ final readonly class ApprovalCard
             approver: $dto->approver,
             requestedAt: $dto->requestedAt,
             decidedAt: $dto->decidedAt,
+            tokenHash: $dto->tokenHash,
         );
     }
 }

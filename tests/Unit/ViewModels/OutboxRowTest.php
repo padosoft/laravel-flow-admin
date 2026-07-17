@@ -41,6 +41,38 @@ final class OutboxRowTest extends TestCase
         $this->assertSame($expected, OutboxRow::fromDto($dto)->canRetry);
     }
 
+    /**
+     * @return array<string, array{0: string, 1: bool}>
+     */
+    public static function redeliverEligibilityProvider(): array
+    {
+        // Narrower than canRetry: Flow::redeliverWebhook only requeues a
+        // `failed` row, so only that status offers the Redeliver button.
+        return [
+            'failed can redeliver' => ['failed', true],
+            'pending cannot' => ['pending', false],
+            'dead cannot' => ['dead', false],
+            'delivered cannot' => ['delivered', false],
+            'unknown cannot' => ['some-future-status', false],
+        ];
+    }
+
+    #[DataProvider('redeliverEligibilityProvider')]
+    public function test_can_redeliver_only_for_failed_rows(string $status, bool $expected): void
+    {
+        $dto = new OutboxEntry(
+            id: 'o_1',
+            eventType: 'run.succeeded',
+            destination: 'https://hooks.example.test/wh',
+            status: $status,
+            attempts: 1,
+            nextAttemptAt: null,
+            lastError: null,
+        );
+
+        $this->assertSame($expected, OutboxRow::fromDto($dto)->canRedeliver);
+    }
+
     public function test_status_label_uses_format_helper(): void
     {
         $dto = new OutboxEntry(

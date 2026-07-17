@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-07-17 — E-PR6 (working mutations): a new core `@api` field is invisible until every adapter→DTO→view hop forwards it
+
+### The whole approve/reject-by-hash seam was dead on arrival because `tokenHash` was dropped at the adapter boundary
+Core added `Dashboard\ApprovalSummary::$tokenHash` (the key `Flow::resumeByHash()`/`rejectByHash()` require). The admin has its OWN `Contracts\Dto\ApprovalSummary` + `ViewModels\ApprovalCard`, and BOTH `EloquentReadModel::mapApproval()` and `ArrayReadModel::mapApproval()` re-map core's DTO field-by-field. Every one of those hops silently ignored the new field, so the hash never reached the Blade form — the buttons would have had nothing to POST. **How to apply:** when you start consuming a newly-added core `@api` field, grep the ENTIRE chain (core DTO → your DTO → both adapters' mappers → view-model → blade) and forward it at each hop; a field appearing on the upstream DTO is NOT automatically visible downstream when an anti-corruption layer re-maps by hand. Add a read-model test asserting the field is populated end-to-end (we added a `tokenHash` assertion), not just a controller test.
+
+### `redeliverWebhook` only acts on `failed` rows — gate the button on that, not the broader "retry-eligible" hint
+Core's `EloquentWebhookOutboxRepository::redeliver()` CAS is `WHERE status = 'failed'` → returns false for anything else (unknown / delivered / pending / in-flight). The existing `OutboxRow::$canRetry` was `pending|failed|dead` (a broad visual hint). Reusing it for the button would have shown Redeliver on rows where the seam is a guaranteed no-op. Added a precise `canRedeliver = status === 'failed'`. **How to apply:** derive an action button's visibility from the seam's ACTUAL precondition, not a pre-existing looser flag with a different meaning.
+
+### E2E on the `array` adapter can't round-trip an engine mutation — split the coverage
+The E2E server runs the `array` read adapter (fixtures) + allow-all authorizer. A real `resumeByHash()`/`cancel()`/`redeliverWebhook()` needs genuinely persisted engine state, which the array fixtures don't create — so a happy-path click in E2E returns a mapped 409/503, not success. **How to apply:** prove the ENGINE round-trip (approve→succeeded, cancel→aborted, redeliver→pending) in PHPUnit Feature tests that boot real persistence (`MigratesFlowTables` + `persistence.enabled` + a file lock store + `$engine->execute()` on an approval-gated flow); prove the UI/UX layer (button renders on eligible rows, confirm gating on destructive actions, the fetch fires at the right endpoint) in Playwright. Don't try to force a full round-trip through the fixture adapter.
+
+### Playwright strict-mode: `.first().locator('.muted')` matched the destination cell AND the placeholder
+A row's destination `<td class="muted">` and the empty-action `<span class="muted">—</span>` both matched, so `toBeVisible()` threw a strict-mode violation (2 elements), not a visibility failure. **How to apply:** give action-cell placeholders/controls a dedicated `data-testid` and target that, rather than reusing a generic CSS class that also decorates unrelated cells.
+
 ## 2026-07-17 — E-PR8b (Advisor inbox): a dependency that can't auto-wire needs its provider registered in the served testbench app
 
 ### `app(SomeClass::class)` 500s with `BindingResolutionException` when the class has non-injectable constructor params AND its provider isn't loaded

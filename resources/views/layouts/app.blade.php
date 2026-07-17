@@ -72,6 +72,10 @@
         setTimeout(() => node.remove(), 3600);
       }
 
+      // Exposed so per-page @stack('scripts') modules (e.g. the E-PR6 action
+      // runner) reuse this single toast implementation instead of duplicating it.
+      window.flowAdminToast = toast;
+
       async function tick() {
         if (!polling) return;
         try {

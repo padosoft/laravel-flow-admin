@@ -178,8 +178,9 @@ final class ArrayReadModel implements ReadModel
                     continue;
                 }
 
+                $tokenId = (string) ($approval['id'] ?? ('approval_' . substr((string) $run['id'], 0, 8)));
                 $pending[] = $this->mapApproval([
-                    'id' => (string) ($approval['id'] ?? ('approval_' . substr((string) $run['id'], 0, 8))),
+                    'id' => $tokenId,
                     'run_id' => (string) $run['id'],
                     'step_name' => (string) ($approval['step'] ?? 'run'),
                     'status' => 'pending',
@@ -187,6 +188,9 @@ final class ArrayReadModel implements ReadModel
                     'actor' => (string) ($approval['actor'] ?? 'system'),
                     'decided_at' => $approval['decided_at'] ?? null,
                     'description' => (string) ($approval['description'] ?? 'Manual approval required'),
+                    // Parity with listApprovals()'s row (line ~139): carry the
+                    // token hash so the ApprovalCard can offer approve/reject.
+                    'token_hash' => (string) ($approval['token_hash'] ?? sha1($tokenId)),
                 ]);
             }
         }
@@ -729,6 +733,7 @@ final class ArrayReadModel implements ReadModel
             requestedAt: $this->timestampToDateTimeImmutable($approval['requested_at'] ?? null),
             approver: $approval['actor'] ?? null,
             decidedAt: $this->timestampToDateTimeImmutable($approval['decided_at'] ?? null),
+            tokenHash: isset($approval['token_hash']) ? (string) $approval['token_hash'] : null,
         );
     }
 

@@ -63,8 +63,23 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
         Route::get('/runs', [RunsController::class, 'index'])->name('runs.index');
         Route::get('/runs/{id}/monitor', [RunMonitorController::class, 'show'])->name('runs.monitor');
         Route::get('/runs/{id}/monitor-state', [RunMonitorController::class, 'state'])->name('runs.monitor-state');
+        // Mutation endpoints (E-PR6) — each wraps a core FlowEngine seam in
+        // Support\Authorize::action (deny-by-default) and returns the uniform
+        // {success,message,data} JSON contract. Registered before the /runs/{id}
+        // catch-all GET so the /cancel and /replay suffixes are not swallowed.
+        Route::post('/runs/{id}/cancel', [RunDetailController::class, 'cancel'])->name('runs.cancel');
+        Route::post('/runs/{id}/replay', [RunDetailController::class, 'replay'])->name('runs.replay');
         Route::get('/runs/{id}', [RunDetailController::class, 'show'])->name('runs.show');
         Route::get('/approvals', [ApprovalsController::class, 'index'])->name('approvals.index');
+        // {tokenHash} is the SHA-256 token hash (hex) — constrained alphanumeric
+        // so a stray path segment can't reach the controller. Not a secret: the
+        // plaintext token is never recoverable from it (see ApprovalSummary).
+        Route::post('/approvals/{tokenHash}/approve', [ApprovalsController::class, 'approve'])
+            ->whereAlphaNumeric('tokenHash')->name('approvals.approve');
+        Route::post('/approvals/{tokenHash}/reject', [ApprovalsController::class, 'reject'])
+            ->whereAlphaNumeric('tokenHash')->name('approvals.reject');
+        Route::post('/outbox/{id}/redeliver', [OutboxController::class, 'redeliver'])
+            ->whereNumber('id')->name('outbox.redeliver');
         Route::get('/advisor', [AdvisorController::class, 'index'])->name('advisor.index');
         // Registered unconditionally (no package-presence oracle — the
         // controller does its class_exists() 404 INSIDE the edit_definition

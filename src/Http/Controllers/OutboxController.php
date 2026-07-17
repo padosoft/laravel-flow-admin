@@ -4,15 +4,23 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelFlowAdmin\Http\Controllers;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\View\View;
+use Padosoft\LaravelFlow\Exceptions\FlowExecutionException;
+use Padosoft\LaravelFlow\FlowEngine;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
+use Padosoft\LaravelFlowAdmin\Support\Authorize;
+use Padosoft\LaravelFlowAdmin\Support\FlowMutation;
 use Padosoft\LaravelFlowAdmin\ViewModels\OutboxRow;
 
 final class OutboxController extends Controller
 {
-    public function __construct(private readonly ReadModel $readModel) {}
+    public function __construct(
+        private readonly ReadModel $readModel,
+        private readonly FlowEngine $engine,
+    ) {}
 
     public function index(Request $request): View
     {
@@ -46,5 +54,36 @@ final class OutboxController extends Controller
                 'pages' => $result->totalPages(),
             ],
         ]);
+    }
+
+    /**
+     * Requeues a FAILED webhook outbox row for another delivery attempt.
+     * `Flow::redeliverWebhook()` resets a `failed` row to `pending` (attempts
+     * back to 0) and returns false for any other state (unknown id, already
+     * delivered, still pending/in-flight) — translated here into a 409 so the
+     * operator sees why nothing happened. The outbox id is a string in the
+     * read model; the seam and authorizer both key on int, so it is cast at
+     * this boundary. Gated by `ActionAuthorizer::canRetryWebhook()`.
+     */
+    public function redeliver(string $id): JsonResponse
+    {
+        $outboxId = (int) $id;
+
+        return Authorize::action(
+            'retry_webhook',
+            fn (): JsonResponse => FlowMutation::run(function () use ($outboxId): string {
+                if (! $this->engine->redeliverWebhook($outboxId)) {
+                    // No `failed` row matched (unknown id / already delivered /
+                    // still pending / in-flight). Signal a 409 through the same
+                    // typed-exception mapping every other mutation uses.
+                    throw new FlowExecutionException(
+                        'This webhook is not in a failed state and cannot be redelivered.',
+                    );
+                }
+
+                return 'Webhook queued for redelivery.';
+            }),
+            context: ['outboxId' => $outboxId],
+        );
     }
 }
