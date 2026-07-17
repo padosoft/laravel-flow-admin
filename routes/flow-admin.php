@@ -71,13 +71,15 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
         Route::post('/runs/{id}/replay', [RunDetailController::class, 'replay'])->name('runs.replay');
         Route::get('/runs/{id}', [RunDetailController::class, 'show'])->name('runs.show');
         Route::get('/approvals', [ApprovalsController::class, 'index'])->name('approvals.index');
-        // {tokenHash} is the SHA-256 token hash (hex) — constrained alphanumeric
-        // so a stray path segment can't reach the controller. Not a secret: the
-        // plaintext token is never recoverable from it (see ApprovalSummary).
+        // {tokenHash} is the SHA-256 token hash — exactly 64 lowercase/uppercase
+        // hex chars. Constrain to that so an over-long or malformed segment can
+        // never reach the controller/authorizer/logs, and to enforce the
+        // documented contract. Not a secret: the plaintext token is never
+        // recoverable from it (see ApprovalSummary).
         Route::post('/approvals/{tokenHash}/approve', [ApprovalsController::class, 'approve'])
-            ->whereAlphaNumeric('tokenHash')->name('approvals.approve');
+            ->where('tokenHash', '[A-Fa-f0-9]{64}')->name('approvals.approve');
         Route::post('/approvals/{tokenHash}/reject', [ApprovalsController::class, 'reject'])
-            ->whereAlphaNumeric('tokenHash')->name('approvals.reject');
+            ->where('tokenHash', '[A-Fa-f0-9]{64}')->name('approvals.reject');
         Route::post('/outbox/{id}/redeliver', [OutboxController::class, 'redeliver'])
             ->whereNumber('id')->name('outbox.redeliver');
         Route::get('/advisor', [AdvisorController::class, 'index'])->name('advisor.index');

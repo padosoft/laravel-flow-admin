@@ -24,6 +24,7 @@
                         data-flow-action
                         data-testid="run-replay"
                         data-action-url="{{ route('flow-admin.runs.replay', ['id' => $viewModel->summary->id]) }}"
+                        data-confirm="Replay this run? A new linked run will be created."
                         data-busy-label="Replaying…">Replay</button>
                 @endif
                 <x-flow-admin::status-badge :status="$viewModel->summary->status" :label="$viewModel->summary->statusLabel" />

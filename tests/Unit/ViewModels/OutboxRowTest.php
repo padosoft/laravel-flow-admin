@@ -60,8 +60,10 @@ final class OutboxRowTest extends TestCase
     #[DataProvider('redeliverEligibilityProvider')]
     public function test_can_redeliver_only_for_failed_rows(string $status, bool $expected): void
     {
+        // Numeric id: the redeliver route is whereNumber + the controller casts
+        // to int, so canRedeliver also requires a numeric id (see below).
         $dto = new OutboxEntry(
-            id: 'o_1',
+            id: '7',
             eventType: 'run.succeeded',
             destination: 'https://hooks.example.test/wh',
             status: $status,
@@ -71,6 +73,23 @@ final class OutboxRowTest extends TestCase
         );
 
         $this->assertSame($expected, OutboxRow::fromDto($dto)->canRedeliver);
+    }
+
+    public function test_can_redeliver_is_false_for_a_failed_row_with_a_non_numeric_id(): void
+    {
+        // A failed row whose id isn't numeric would render a Redeliver button
+        // that 404s against the whereNumber route — so it must be gated off.
+        $dto = new OutboxEntry(
+            id: 'outbox_abc',
+            eventType: 'run.succeeded',
+            destination: 'https://hooks.example.test/wh',
+            status: 'failed',
+            attempts: 1,
+            nextAttemptAt: null,
+            lastError: null,
+        );
+
+        $this->assertFalse(OutboxRow::fromDto($dto)->canRedeliver);
     }
 
     public function test_status_label_uses_format_helper(): void

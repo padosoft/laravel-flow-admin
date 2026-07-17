@@ -67,7 +67,18 @@
       function toast(title, body, kind) {
         const node = document.createElement('div');
         node.className = 'toast' + (kind ? ' ' + kind : '');
-        node.innerHTML = '<b>' + title + '</b>' + (body ? '<small>' + body + '</small>' : '');
+        // Build with textContent, never innerHTML: the mutation action runner
+        // passes SERVER-provided messages here (curated exception strings that
+        // interpolate a run id / flow name from the URL), so concatenating them
+        // into innerHTML would be an XSS sink if one ever contained `<`/`>`.
+        const strong = document.createElement('b');
+        strong.textContent = title;
+        node.appendChild(strong);
+        if (body) {
+          const small = document.createElement('small');
+          small.textContent = body;
+          node.appendChild(small);
+        }
         toastStack.appendChild(node);
         setTimeout(() => node.remove(), 3600);
       }

@@ -39,7 +39,12 @@ final readonly class OutboxRow
             // already queued and a `delivered` one is terminal, so the button
             // is offered only where the seam will actually act — narrower than
             // `canRetry`, which is the broader visual "retry-eligible" hint.
-            canRedeliver: $dto->status === 'failed',
+            // Also require a NUMERIC id: the `/outbox/{id}/redeliver` route is
+            // `whereNumber` and the controller casts to int, so a non-numeric
+            // id (the DTO type is string) would render a button that always
+            // 404s. Real engine ids are numeric; this only guards a stray
+            // adapter fixture.
+            canRedeliver: $dto->status === 'failed' && ctype_digit($dto->id),
             attempts: $dto->attempts,
             nextAttemptAt: $dto->nextAttemptAt,
             lastError: $dto->lastError,

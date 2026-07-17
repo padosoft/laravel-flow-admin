@@ -136,7 +136,9 @@ final class ArrayReadModel implements ReadModel
                     'requested_at' => $approval['requested_at'] ?? null,
                     'decided_at' => $approval['decided_at'] ?? null,
                     'actor' => (string) ($approval['actor'] ?? 'system'),
-                    'token_hash' => (string) ($approval['token_hash'] ?? sha1($tokenId)),
+                    // SHA-256 (64 hex) so the demo/array approve+reject links
+                    // satisfy the route's 64-hex {tokenHash} constraint.
+                    'token_hash' => (string) ($approval['token_hash'] ?? hash('sha256', $tokenId)),
                     'description' => (string) ($approval['description'] ?? "Approval requested for {$stepName}"),
                 ];
 
@@ -188,9 +190,10 @@ final class ArrayReadModel implements ReadModel
                     'actor' => (string) ($approval['actor'] ?? 'system'),
                     'decided_at' => $approval['decided_at'] ?? null,
                     'description' => (string) ($approval['description'] ?? 'Manual approval required'),
-                    // Parity with listApprovals()'s row (line ~139): carry the
-                    // token hash so the ApprovalCard can offer approve/reject.
-                    'token_hash' => (string) ($approval['token_hash'] ?? sha1($tokenId)),
+                    // Parity with listApprovals()'s row: carry a SHA-256 (64 hex)
+                    // token hash so the ApprovalCard can offer approve/reject and
+                    // the demo link satisfies the route's 64-hex constraint.
+                    'token_hash' => (string) ($approval['token_hash'] ?? hash('sha256', $tokenId)),
                 ]);
             }
         }

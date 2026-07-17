@@ -44,6 +44,7 @@
                                                 data-flow-action
                                                 data-testid="outbox-redeliver"
                                                 data-action-url="{{ route('flow-admin.outbox.redeliver', ['id' => $row->id]) }}"
+                                                data-confirm="Redeliver this webhook? It will be queued for another delivery attempt."
                                                 data-busy-label="Requeuing…">Redeliver</button>
                                         @else
                                             <span class="muted" data-testid="outbox-no-action">—</span>

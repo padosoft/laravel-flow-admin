@@ -68,6 +68,9 @@ test.describe('flow-admin mutations (E-PR6)', () => {
     await expect(page.getByTestId('run-replay')).toBeVisible();
     await expect(page.getByTestId('run-cancel')).toHaveCount(0);
 
+    // Replay is confirm-gated (it creates a new linked run) — accept the dialog.
+    page.on('dialog', (dialog) => dialog.accept());
+
     const [response] = await Promise.all([
       page.waitForResponse((r) => r.request().method() === 'POST' && /\/flow\/runs\/[^/]+\/replay$/.test(r.url())),
       page.getByTestId('run-replay').click(),
