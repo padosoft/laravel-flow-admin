@@ -554,6 +554,7 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
 
   const onConnect = useCallback(
     (params) => {
+      setDryRun(null); // a new edge changes the execution plan — drop any stale one
       setState((current) => {
         const sourceNode = current.nodes.find((n) => n.id === params.source);
         const targetNode = current.nodes.find((n) => n.id === params.target);
@@ -575,6 +576,11 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
   );
 
   const onNodesChange = useCallback((changes) => {
+    // A node add/remove changes the plan; a pure position/selection change
+    // does not, so only clear a stale dry-run on structural changes.
+    if (changes.some((change) => change.type === 'remove' || change.type === 'add')) {
+      setDryRun(null);
+    }
     setState((current) => {
       const nodes = applyNodeChanges(changes, current.nodes);
 
@@ -598,6 +604,9 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
   }, []);
 
   const onEdgesChange = useCallback((changes) => {
+    if (changes.some((change) => change.type === 'remove')) {
+      setDryRun(null); // removing an edge changes the execution plan
+    }
     setState((current) => {
       const edges = applyEdgeChanges(changes, current.edges);
 
@@ -615,6 +624,8 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
       event.preventDefault();
       const type = event.dataTransfer.getData('application/flow-node-type');
       if (!type) return;
+
+      setDryRun(null); // a new node changes the execution plan
 
       setState((current) => {
         const entry = current.catalog[type];

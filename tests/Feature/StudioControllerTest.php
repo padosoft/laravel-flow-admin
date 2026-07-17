@@ -368,6 +368,27 @@ final class StudioControllerTest extends TestCase
         $response->assertJson(['success' => false]);
     }
 
+    public function test_dry_run_rejects_a_semantically_invalid_graph_with_422(): void
+    {
+        // Structurally parseable but semantically invalid (a connection to a
+        // node that doesn't exist): must be caught by GraphValidator, not
+        // silently planned into an empty wave list.
+        $this->registerDemoTrigger();
+
+        $response = $this->postJson(route('flow-admin.studio.dry-run', ['name' => 'x']), [
+            'schema_version' => 1,
+            'kind' => 'laravel-flow',
+            'metadata' => [],
+            'nodes' => [$this->triggerNode('start')],
+            'connections' => [
+                ['sourceNodeId' => 'start', 'sourcePortKey' => 'out', 'targetNodeId' => 'ghost', 'targetPortKey' => 'in'],
+            ],
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJson(['success' => false]);
+    }
+
     private function registerDemoTrigger(): void
     {
         $registry = $this->app->make(NodeRegistry::class);

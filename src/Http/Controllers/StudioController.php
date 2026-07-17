@@ -366,10 +366,11 @@ final class StudioController extends Controller
     /**
      * Statically plans the POSTed graph via core's `DryRunPlanner` and returns
      * the Kahn-wave execution plan + cost estimate, executing NO handler and
-     * writing ZERO rows (by construction of the planner). Advisory only, so —
-     * like the diff read endpoint — it needs no edit gate: the response is
-     * structural (node ids, wave grouping, cost dimensions), never node
-     * `config`. `DryRunPlanner` is method-injected from the container.
+     * writing ZERO rows (by construction of the planner). Advisory only, so it
+     * needs no edit gate: the response is structural (node ids, wave grouping,
+     * cost dimensions), never node `config` — and the node types + `#[Cost]`
+     * hints it exposes are already public via the ungated `catalog()` endpoint.
+     * `DryRunPlanner` is method-injected from the container.
      */
     public function dryRun(Request $request, DryRunPlanner $planner, string $name): JsonResponse
     {
@@ -378,6 +379,12 @@ final class StudioController extends Controller
 
         try {
             $graph = $this->serializer->fromArray($payload);
+            // Semantic validation too (like storeDraft): the planner's Kahn
+            // ordering silently returns an EMPTY wave list on a cycle while
+            // still summing per-node cost, which would render as a misleading
+            // "0 waves, non-zero cost" plan instead of a clear invalid-graph
+            // error — exactly the wrong signal for someone debugging a graph.
+            $this->validator->validate($graph);
         } catch (InvalidGraphException $e) {
             return response()->json([
                 'success' => false,
