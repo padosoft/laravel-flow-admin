@@ -242,6 +242,14 @@ test.describe('flow-admin studio editor (E-PR3 canvas editor)', () => {
     await expect(page.getByTestId('ai-build-modal')).toBeHidden();
     // The canvas is untouched — still the original 4 fixture nodes.
     await expect(page.locator('.react-flow__node')).toHaveCount(4);
+
+    // Escape also closes the dialog (keyboard escape hatch).
+    await page.getByTestId('studio-ai-build-button').click();
+    await expect(page.getByTestId('ai-build-modal')).toBeVisible();
+    await page.getByTestId('ai-build-prompt').focus();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('ai-build-modal')).toBeHidden();
+    await expect(page.locator('.react-flow__node')).toHaveCount(4);
   });
 
   test('the read-only canvas links into the editor', async ({ page }) => {
