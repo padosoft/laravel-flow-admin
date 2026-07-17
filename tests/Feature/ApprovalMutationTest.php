@@ -81,4 +81,26 @@ final class ApprovalMutationTest extends MutationTestCase
         $response->assertStatus(409);
         $response->assertJsonPath('success', false);
     }
+
+    public function test_reversing_an_already_decided_approval_returns_409(): void
+    {
+        $engine = $this->bootFlowPersistence();
+        $this->allowAllActions();
+        ['run' => $run, 'plainToken' => $plain] = $this->seedPausedApprovalRun($engine);
+        $hash = ApprovalTokenManager::hashToken($plain);
+
+        // First decision grants and resumes the run to success.
+        $this->postJson(route('flow-admin.approvals.approve', ['tokenHash' => $hash]))->assertStatus(200);
+
+        // A second, OPPOSITE decision on the now-decided token is a conflict.
+        $response = $this->postJson(route('flow-admin.approvals.reject', ['tokenHash' => $hash]));
+
+        $response->assertStatus(409);
+        $response->assertJsonPath('success', false);
+        // The run stays succeeded — the reversal never took effect.
+        $this->assertSame(
+            FlowRun::STATUS_SUCCEEDED,
+            DB::table('flow_runs')->where('id', $run->id)->value('status'),
+        );
+    }
 }

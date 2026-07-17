@@ -53,7 +53,12 @@
       let data = {};
       try { data = await res.json(); } catch (_) { data = {}; }
 
-      if (res.ok && data.success !== false) {
+      // Fail closed: only a real {success:true} envelope on a 2xx counts as
+      // success. A 2xx with a non-envelope body (unparseable JSON, a proxy /
+      // maintenance interstitial, a middleware that swallowed the controller)
+      // must NOT be reported as done — otherwise a failed mutation would show
+      // "Done." and reload, hiding it from the operator.
+      if (res.ok && data && data.success === true) {
         notify(data.message || 'Done.', '', '');
         // Let the toast render, then reload so the list reflects the change.
         setTimeout(() => window.location.reload(), 650);

@@ -69,4 +69,25 @@ final class RunMutationTest extends MutationTestCase
         $response->assertStatus(409);
         $response->assertJsonPath('success', false);
     }
+
+    public function test_cancelling_an_already_terminal_run_is_idempotent(): void
+    {
+        $engine = $this->bootFlowPersistence();
+        $this->allowAllActions();
+        ['run' => $run] = $this->seedPausedApprovalRun($engine);
+
+        // First cancel aborts the active run.
+        $this->postJson(route('flow-admin.runs.cancel', ['id' => $run->id]))->assertStatus(200);
+
+        // A second cancel on the now-terminal run is a no-op success (core's
+        // cancel() is idempotent on an already-terminal run), NOT a 409.
+        $response = $this->postJson(route('flow-admin.runs.cancel', ['id' => $run->id]));
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('success', true);
+        $this->assertSame(
+            FlowRun::STATUS_ABORTED,
+            DB::table('flow_runs')->where('id', $run->id)->value('status'),
+        );
+    }
 }

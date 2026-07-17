@@ -32,6 +32,19 @@ use Throwable;
  * they are surfaced verbatim. The 503 and 500 paths use generic messages and
  * log the exception class only, never its message (which could carry DB/driver
  * internals).
+ *
+ * KNOWN LIMITATION (approvals-only 503): only the approval seams have a
+ * dedicated `ApprovalPersistenceException` for "migrations missing / DB
+ * unreachable", so only they map that infra failure to 503. `cancel()`,
+ * `replay()` and `redeliverWebhook()` raise a plain `FlowExecutionException`
+ * for BOTH ordinary state conflicts (not-found, non-terminal, unpinned) AND
+ * genuine persistence-unavailability (via core's
+ * `flowPersistenceUnavailableException()`), so both collapse to 409 here. The
+ * operator still sees the real reason (the curated message is surfaced), but a
+ * 409 reads as "not retryable" to automation. Splitting them requires a core
+ * change (a distinct persistence-unavailable exception for those three seams);
+ * tracked as a follow-up. Message-sniffing to reclassify is deliberately NOT
+ * done — it is brittle across core message changes.
  */
 final class FlowMutation
 {
