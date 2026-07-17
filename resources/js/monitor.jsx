@@ -15,6 +15,10 @@ const STATE_COLORS = {
   blocked: '#8b5cf6',
   invalid_input: '#f97316',
   dead_letter: '#7f1d1d',
+  // `compensated` is not a NodeState (it's a saga-rollback outcome the admin's
+  // demo fixtures use); recognized here so it renders intentionally rather
+  // than falling through to the gray "pending" default.
+  compensated: '#a855f7',
 };
 
 const STATE_LABELS = {
@@ -27,6 +31,7 @@ const STATE_LABELS = {
   blocked: 'Blocked',
   invalid_input: 'Invalid input',
   dead_letter: 'Dead letter',
+  compensated: 'Compensated',
 };
 
 function recomputeProgress(nodes, base = {}) {
@@ -34,7 +39,8 @@ function recomputeProgress(nodes, base = {}) {
   const completed = nodes.filter((n) => n.state === 'succeeded').length;
   const failed = nodes.filter((n) => n.state === 'failed').length;
 
-  return { ...base, total, completed, failed, pct: total > 0 ? Math.round((completed / total) * 100) : 0 };
+  // Settled = completed OR failed, matching core's GraphRunProgressUpdated.
+  return { ...base, total, completed, failed, pct: total > 0 ? Math.round(((completed + failed) / total) * 100) : 0 };
 }
 
 // A `.node.transitioned` broadcast carries {run_id, node_id, node_type,
@@ -90,7 +96,11 @@ function RunMonitor({ monitorStateUrl, broadcasting, channel }) {
     };
   }, [fetchState]);
 
-  const live = broadcasting === 'on' && typeof window !== 'undefined' && Boolean(window.Echo);
+  // Private-channel subscription can fail (the host app must authorize
+  // `{prefix}.run.{id}` in routes/channels.php — core ships no auth callback).
+  // On failure we drop to polling instead of showing stale state forever.
+  const [liveFailed, setLiveFailed] = useState(false);
+  const live = broadcasting === 'on' && typeof window !== 'undefined' && Boolean(window.Echo) && !liveFailed;
 
   // Live mode: subscribe to the run's private channel. Without an Echo client
   // (or with broadcasting disabled) this effect is inert and the polling
@@ -107,6 +117,11 @@ function RunMonitor({ monitorStateUrl, broadcasting, channel }) {
     subscription.listen('.run.progress', (event) => {
       setState((current) => (current.data ? { ...current, data: applyProgressEvent(current.data, event) } : current));
     });
+    // Echo exposes channel auth/subscription errors via `.error()`; fall back
+    // to polling when the host hasn't authorized this private channel.
+    if (typeof subscription.error === 'function') {
+      subscription.error(() => setLiveFailed(true));
+    }
 
     return () => {
       try {
@@ -123,13 +138,19 @@ function RunMonitor({ monitorStateUrl, broadcasting, channel }) {
       return undefined;
     }
 
+    let cancelled = false;
     const timer = setInterval(() => {
       fetchState()
-        .then((data) => setState({ status: 'ready', data }))
+        .then((data) => {
+          if (!cancelled) setState({ status: 'ready', data });
+        })
         .catch(() => {});
     }, 2500);
 
-    return () => clearInterval(timer);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, [live, fetchState]);
 
   if (state.status === 'loading') {

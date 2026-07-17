@@ -67,9 +67,9 @@ final class RunMonitorController extends Controller
     private function statePayload(RunDetail $detail): array
     {
         $nodes = array_map(
-            static fn (Step $step, int $index): array => [
+            fn (Step $step, int $index): array => [
                 'node_id' => $step->name,
-                'state' => $step->status,
+                'state' => $this->normalizeState($step->status),
                 'cache_hit' => $step->cacheHit,
                 'sequence' => $index + 1,
             ],
@@ -88,10 +88,25 @@ final class RunMonitorController extends Controller
                 'total' => $total,
                 'completed' => $completed,
                 'failed' => $failed,
-                'pct' => $total > 0 ? (int) round($completed / $total * 100) : 0,
+                // Settled = completed OR failed, matching core's own
+                // GraphRunProgressUpdated::progressPct() so the polled/live
+                // recomputed value never disagrees with a `run.progress`
+                // broadcast on a run that has failures.
+                'pct' => $total > 0 ? (int) round(($completed + $failed) / $total * 100) : 0,
             ],
             'nodes' => $nodes,
         ];
+    }
+
+    /**
+     * The Eloquent adapter passes core's real `NodeState` vocabulary through
+     * (`succeeded`, …); the array/demo adapter's fixtures use the legacy
+     * `success` slug. Canonicalize to the core `NodeState` value the monitor
+     * colors and counts by, so both adapters agree on one vocabulary.
+     */
+    private function normalizeState(string $status): string
+    {
+        return $status === 'success' ? 'succeeded' : $status;
     }
 
     private function channelFor(string $runId): string

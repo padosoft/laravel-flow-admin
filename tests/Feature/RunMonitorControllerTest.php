@@ -87,6 +87,38 @@ final class RunMonitorControllerTest extends TestCase
         $this->assertFalse($response->json('nodes.0.cache_hit'));
         $this->assertTrue($response->json('nodes.1.cache_hit'));
         $response->assertDontSee('sk_live_should_never_appear');
+
+        // Both steps succeeded → progress is 2/2 = 100%.
+        $response->assertJsonPath('progress.completed', 2);
+        $response->assertJsonPath('progress.total', 2);
+        $response->assertJsonPath('progress.pct', 100);
+    }
+
+    public function test_monitor_state_normalizes_the_legacy_success_status_to_succeeded(): void
+    {
+        // The array/demo adapter emits the legacy `success` slug; the monitor
+        // must canonicalize it to core's `succeeded` NodeState so colors and
+        // the completed counter agree across adapters.
+        $repository = Mockery::mock(ReadModel::class);
+        $repository->shouldReceive('findRun')->andReturn(new RunDetail(
+            summary: $this->fakeSummary('run-y', 'success'),
+            steps: [
+                new Step('a', 'success', null, null, null, 1, [], null, false),
+                new Step('b', 'running', null, null, null, 1, [], null, false),
+            ],
+            audit: [],
+            inputPayload: [],
+            outputPayload: [],
+        ));
+        $this->app->instance(ReadModel::class, $repository);
+
+        $response = $this->getJson(route('flow-admin.runs.monitor-state', ['id' => 'run-y']));
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('nodes.0.state', 'succeeded');
+        $response->assertJsonPath('nodes.1.state', 'running');
+        $response->assertJsonPath('progress.completed', 1);
+        $response->assertJsonPath('progress.pct', 50);
     }
 
     public function test_monitor_page_reflects_the_broadcasting_config(): void
