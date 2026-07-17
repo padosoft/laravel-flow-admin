@@ -39,8 +39,14 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
         // billable third-party LLM request, so an authorized-but-careless (or
         // compromised) operator could otherwise run up cost. 12/min per user is
         // generous for interactive authoring yet caps runaway/scripted spend.
+        // The 3rd `throttle` arg is a KEY PREFIX (see ThrottleRequests::handle
+        // — `$prefix.$signature`): without it the bare `throttle:12,1` bucket
+        // is keyed only by domain+IP/user and would be SHARED with any other
+        // bare-throttled route in the host app, so unrelated traffic could
+        // starve (or be starved by) this AI cost budget. A dedicated prefix
+        // isolates it.
         Route::post('/studio/{name}/ai-build', [StudioController::class, 'aiBuild'])
-            ->middleware('throttle:12,1')
+            ->middleware('throttle:12,1,flow-admin-ai-build')
             ->name('studio.ai-build');
         Route::get('/studio/{name}', [StudioController::class, 'show'])->name('studio.show');
         Route::get('/runs', [RunsController::class, 'index'])->name('runs.index');
