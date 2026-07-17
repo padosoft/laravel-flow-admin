@@ -41,3 +41,11 @@ env:
   # No real broadcaster runs — the flag only drives the monitor page's
   # data-broadcasting attribute; without an Echo client the page still polls.
   LARAVEL_FLOW_BROADCASTING_ENABLED: true
+  # E-PR8: swap padosoft/laravel-flow-ai's real (network) LLM client for the
+  # deterministic FakeLlmClient so the "Build with AI" E2E can exercise the
+  # AI-builder happy path with no live model / API key. Dev/E2E only — the
+  # provider refuses this flag in the production environment (same posture as
+  # FLOW_ADMIN_AUTHORIZER=allow). The fake returns a single demo.trigger node,
+  # a type the array adapter registers, so the server-side GraphValidator pass
+  # accepts it.
+  FLOW_ADMIN_FAKE_LLM: true

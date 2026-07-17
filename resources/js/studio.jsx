@@ -491,9 +491,10 @@ function buildGraphPayload(nodes, edges) {
   return { schema_version: 1, kind: 'laravel-flow', metadata: {}, nodes: graphNodes, connections };
 }
 
-function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
+function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl, aiBuildUrl }) {
   const [state, setState] = useState({ status: 'loading', nodes: [], edges: [], catalog: {} });
   const [dryRun, setDryRun] = useState(null);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
   // Monotonic id so a slow dry-run response that resolves AFTER the graph was
   // edited (which bumps this) is ignored instead of rendering a stale plan.
   // Bumped by both onDryRun and every structural-edit handler below.
@@ -765,6 +766,23 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
       });
   }, [state.nodes, state.edges, dryRunUrl]);
 
+  // Loads an AI-generated (already server-validated) graph envelope onto the
+  // canvas, REPLACING the current nodes/edges — the operator reviews it and
+  // saves it through the normal draft flow. Any previous dry-run plan no
+  // longer matches the new graph, so drop it (and bump the stale guard).
+  const onAiGenerated = useCallback((graph) => {
+    dryRunReqRef.current += 1;
+    setDryRun(null);
+    setState((current) => {
+      const { nodes, edges } = editableGraphToFlowElements({ graph, catalog: current.catalog });
+
+      return { ...current, status: 'ready', nodes, edges };
+    });
+    setSelectedNodeId(null);
+    setSaveStatus({ kind: 'idle', message: '' });
+    setAiModalOpen(false);
+  }, []);
+
   if (state.status === 'loading') {
     return (
       <div className="empty" data-testid="flow-studio-loading">
@@ -836,6 +854,16 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
               {dryRun?.status === 'planning' ? 'Planning…' : 'Dry run'}
             </button>
           ) : null}
+          {aiBuildUrl ? (
+            <button
+              type="button"
+              onClick={() => setAiModalOpen(true)}
+              disabled={!(state.status === 'ready' || state.status === 'new')}
+              data-testid="studio-ai-build-button"
+            >
+              Build with AI
+            </button>
+          ) : null}
           {hasInvalidWire && (
             <span className="field-error" data-testid="studio-invalid-wire-warning">
               Fix the invalid connection (shown in red) before saving.
@@ -876,6 +904,9 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl }) {
         ) : null}
       </div>
       <InspectorPanel node={selectedNode} onChangeConfig={onChangeConfig} onDeleteNode={onDeleteNode} />
+      {aiModalOpen && aiBuildUrl ? (
+        <AiBuildModal aiBuildUrl={aiBuildUrl} onClose={() => setAiModalOpen(false)} onGenerated={onAiGenerated} />
+      ) : null}
     </div>
   );
 }
@@ -885,6 +916,97 @@ function StudioEditor(props) {
     <ReactFlowProvider>
       <StudioEditorCanvas {...props} />
     </ReactFlowProvider>
+  );
+}
+
+/**
+ * "Build with AI" modal: an operator types a natural-language prompt, the
+ * server (padosoft/laravel-flow-ai's FlowBuilderService) returns an
+ * ALREADY-VALIDATED graph envelope, and the canvas loads it for review — the
+ * AI never persists anything. A 422 carries the concrete validation
+ * violations for the operator to see why a prompt didn't yield a usable graph.
+ */
+function AiBuildModal({ onClose, onGenerated, aiBuildUrl }) {
+  const [prompt, setPrompt] = useState('');
+  const [state, setState] = useState({ kind: 'idle', message: '', violations: [] });
+
+  const submit = useCallback(async () => {
+    const trimmed = prompt.trim();
+    if (trimmed.length < 3) {
+      setState({ kind: 'error', message: 'Describe the flow in a few words first.', violations: [] });
+
+      return;
+    }
+
+    setState({ kind: 'building', message: '', violations: [] });
+    try {
+      const response = await fetch(aiBuildUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+        body: JSON.stringify({ prompt: trimmed }),
+      });
+      const body = await response.json().catch(() => ({}));
+
+      if (!response.ok || !body.success) {
+        setState({
+          kind: 'error',
+          message: body.message ?? 'Could not build the graph.',
+          violations: Array.isArray(body.data?.violations) ? body.data.violations : [],
+        });
+
+        return;
+      }
+
+      onGenerated(body.graph);
+    } catch {
+      setState({ kind: 'error', message: 'Network error while contacting the AI builder.', violations: [] });
+    }
+  }, [prompt, aiBuildUrl, onGenerated]);
+
+  return (
+    <div
+      data-testid="ai-build-modal"
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: 'fixed', inset: 0, background: 'var(--bg-overlay, rgba(0,0,0,0.6))',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
+      }}
+    >
+      <div style={{ background: 'var(--bg-elevated, #1a1a1a)', color: 'var(--text, #eee)', borderRadius: 12, padding: 20, width: 'min(560px, 92vw)', border: '1px solid var(--border, #333)' }}>
+        <h3 style={{ margin: '0 0 8px', fontSize: 16 }}>Build with AI</h3>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary, #999)', margin: '0 0 12px' }}>
+          Describe the flow in plain language. The generated graph is validated and loaded onto the canvas for you to review — nothing is saved until you click <b style={{ color: 'var(--text, #eee)' }}>Save as draft</b>.
+        </p>
+        <textarea
+          data-testid="ai-build-prompt"
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+          rows={4}
+          placeholder="e.g. When an order is placed, validate it, charge the card, then notify the customer."
+          style={{ width: '100%', boxSizing: 'border-box', marginBottom: 12, fontSize: 13, padding: 8 }}
+          disabled={state.kind === 'building'}
+        />
+        {state.kind === 'error' ? (
+          <div className="field-error" data-testid="ai-build-error" style={{ marginBottom: 12 }}>
+            {state.message}
+            {state.violations.length > 0 ? (
+              <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                {state.violations.map((v, index) => <li key={index}>{v}</li>)}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button type="button" className="btn" data-testid="ai-build-cancel" onClick={onClose} disabled={state.kind === 'building'}>
+            Cancel
+          </button>
+          <button type="button" className="btn primary" data-testid="ai-build-submit" onClick={submit} disabled={state.kind === 'building'}>
+            {state.kind === 'building' ? 'Building…' : 'Generate'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1186,14 +1308,14 @@ const mountPoint = document.getElementById('flow-studio-root');
 
 if (mountPoint) {
   const {
-    mode, graphUrl, flowName, editGraphUrl, catalogUrl, draftUrl, dryRunUrl,
+    mode, graphUrl, flowName, editGraphUrl, catalogUrl, draftUrl, dryRunUrl, aiBuildUrl,
     versionListUrl, diffUrl, publishUrl, editUrl,
   } = mountPoint.dataset;
 
   createRoot(mountPoint).render(
     <StrictMode>
       {mode === 'edit' ? (
-        <StudioEditor flowName={flowName} editGraphUrl={editGraphUrl} catalogUrl={catalogUrl} draftUrl={draftUrl} dryRunUrl={dryRunUrl} />
+        <StudioEditor flowName={flowName} editGraphUrl={editGraphUrl} catalogUrl={catalogUrl} draftUrl={draftUrl} dryRunUrl={dryRunUrl} aiBuildUrl={aiBuildUrl} />
       ) : mode === 'versions' ? (
         <StudioVersions
           versionListUrl={versionListUrl}

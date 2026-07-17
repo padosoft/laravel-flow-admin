@@ -16,6 +16,7 @@ use Padosoft\LaravelFlow\Executor\DryRun\DryRunPlanner;
 use Padosoft\LaravelFlow\Graph\Exceptions\DefinitionLifecycleException;
 use Padosoft\LaravelFlow\Graph\Exceptions\DefinitionNotFoundException;
 use Padosoft\LaravelFlow\Graph\Exceptions\InvalidGraphException;
+use Padosoft\LaravelFlow\Graph\GraphDefinition;
 use Padosoft\LaravelFlow\Graph\GraphSerializer;
 use Padosoft\LaravelFlow\Graph\GraphValidator;
 use Padosoft\LaravelFlow\Graph\StoredDefinition;
@@ -23,6 +24,7 @@ use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
 use Padosoft\LaravelFlowAdmin\Support\Authorize;
 use Padosoft\LaravelFlowAdmin\Support\GraphRedactor;
 use Padosoft\LaravelFlowAdmin\ViewModels\DefinitionRow;
+use Padosoft\LaravelFlowAI\Builder\FlowBuilderService;
 use Throwable;
 
 final class StudioController extends Controller
@@ -111,6 +113,11 @@ final class StudioController extends Controller
             ],
             'counts' => $this->counts(),
             'flowName' => $name,
+            // The "Build with AI" panel is only wired when the optional
+            // padosoft/laravel-flow-ai package is installed — the view omits
+            // the data-ai-build-url attribute otherwise, so the React island
+            // simply doesn't render the AI button.
+            'aiBuilderAvailable' => class_exists(FlowBuilderService::class),
         ]);
     }
 
@@ -410,6 +417,87 @@ final class StudioController extends Controller
             'plan' => $result['plan']->toArray(),
             'cost' => $result['cost']->toArray(),
         ]);
+    }
+
+    /**
+     * Turns a natural-language prompt into a VALIDATED draft graph via
+     * padosoft/laravel-flow-ai's {@see FlowBuilderService}, and returns the
+     * serialized envelope for the editor to load onto the canvas — it does
+     * NOT persist anything. The operator reviews the proposal and then saves
+     * it through the existing (separately-gated) `storeDraft()` flow, so the
+     * AI never writes a definition on its own.
+     *
+     * Gated by `ActionAuthorizer::canEditDefinition()` — same authoring
+     * boundary as editing/saving a draft, and it consumes a (billable) model
+     * call. `FlowBuilderService::build()` already runs the result through
+     * core's `GraphValidator`, so a model that hallucinates an invalid graph
+     * surfaces here as a typed 422 with the concrete violations, never a
+     * broken draft. The service is resolved from the container (not
+     * method-injected) behind a class_exists() guard so the endpoint degrades
+     * to a clean 404 if the optional AI package is absent, rather than a
+     * container resolution error.
+     */
+    public function aiBuild(Request $request, string $name): JsonResponse
+    {
+        if (! class_exists(FlowBuilderService::class)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The AI flow builder is not available (padosoft/laravel-flow-ai is not installed).',
+            ], 404);
+        }
+
+        return Authorize::action(
+            'edit_definition',
+            function () use ($request): JsonResponse {
+                $validated = $request->validate([
+                    'prompt' => 'required|string|min:3|max:4000',
+                    'model' => 'nullable|string|max:120',
+                ]);
+
+                $prompt = (string) $validated['prompt'];
+                $model = isset($validated['model']) && $validated['model'] !== ''
+                    ? (string) $validated['model']
+                    : (string) config('flow-admin.ai.model', 'claude-sonnet-5');
+
+                /** @var FlowBuilderService $builder */
+                $builder = app(FlowBuilderService::class);
+
+                try {
+                    $result = $builder->build($prompt, $model);
+                } catch (Throwable $e) {
+                    // A real LLM client can throw on transport/API errors
+                    // (build() only catches PolicyDeniedException internally).
+                    // Never leak the raw message — it can echo the prompt or
+                    // provider internals. Sanitized 500, class-only log.
+                    Log::warning('laravel-flow-admin: AI flow builder failed', [
+                        'exception' => $e::class,
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The AI builder could not complete. Try again.',
+                    ], 500);
+                }
+
+                if (! $result->success) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The AI could not produce a valid graph from that prompt.',
+                        'data' => ['violations' => $result->errors],
+                    ], 422);
+                }
+
+                /** @var GraphDefinition $graph */
+                $graph = $result->graph;
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Draft graph generated. Review it, then save it as a draft.',
+                    'graph' => $this->serializer->toArray($graph),
+                ]);
+            },
+            context: ['flowName' => $name],
+        );
     }
 
     /**

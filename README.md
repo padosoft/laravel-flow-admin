@@ -9,7 +9,7 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![PHP Version](https://img.shields.io/packagist/php-v/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![Laravel](https://img.shields.io/badge/Laravel-%5E13.0-ff2d20?style=flat-square&logo=laravel)](https://laravel.com)
-[![Tests](https://img.shields.io/badge/tests-169%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
+[![Tests](https://img.shields.io/badge/tests-174%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![E2E](https://img.shields.io/badge/playwright-chromium%20%7C%20firefox%20%7C%20webkit-45ba4b?style=flat-square&logo=playwright)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%208-brightgreen?style=flat-square)](https://phpstan.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-pint-7e22ce?style=flat-square)](https://laravel.com/docs/pint)
@@ -79,12 +79,13 @@
 - 🗂️ **Flow versioning** — every stored version listed with its draft/published/archived status, one-click **Publish** behind an immutability confirmation (core re-validates on publish), and a node-level **visual diff** between any two versions (added glows green, removed red-dashed, changed amber) computed server-side so no node `config` ever leaves the server.
 - 📡 **Live run monitor** — a per-run page that subscribes to core's private broadcast channel (`node.transitioned` / `run.progress`) via Laravel Echo when broadcasting is enabled, or **falls back to polling** when it isn't. Renders all nine real `NodeState` colors plus a separate ⚡ cache-hit badge on succeeded nodes, with a live progress header. The polled state endpoint carries node states only — never the run's payloads.
 - 🧪 **Dry-run planner** — a **Dry run** button on the Studio editor statically plans the current graph via core's `DryRunPlanner` (Kahn-wave execution order + a per-node/total cost estimate) and renders the wave plan + cost, executing **no** handler and writing **zero** rows.
+- 🤖 **Build with AI** — a **Build with AI** panel on the Studio editor turns a natural-language prompt into an **already-validated** draft graph via [`padosoft/laravel-flow-ai`](https://github.com/padosoft/laravel-flow-ai)'s `FlowBuilderService` (the model picks only from your real node catalog; the result runs through core's `GraphValidator` server-side before it ever reaches the browser). The graph is loaded onto the canvas for you to review and edit — **nothing is persisted** until you click *Save as draft*. Gated by `ActionAuthorizer::canEditDefinition()`; optional (only shown when the AI package is installed).
 - ⚡ **⌘K command palette** — jump anywhere in two keystrokes.
 - 🎨 **Pixel-perfect dark + light themes** — persisted in cookie, switchable per user.
 - 🛡️ **Deny-by-default authorizer** — every mutation goes through your `ActionAuthorizer`. No accidents.
 - 🔁 **Auto-refreshing pages** — configurable polling (`/flow/api/live`).
 - 🧱 **Adapter pattern** — `eloquent` for prod, `array` for demos / E2E (deterministic seed-42 fixtures).
-- 🧪 **Battle-tested** — 169 PHPUnit tests, 24 Playwright scenarios (72 runs across Chromium / Firefox / WebKit — 66 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario).
+- 🧪 **Battle-tested** — 174 PHPUnit tests, 26 Playwright scenarios (78 runs across Chromium / Firefox / WebKit — 72 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario).
 - 📦 **Zero-coupling** — built on a public `Contracts\*` surface; engine internals stay `@internal`.
 
 ---
@@ -283,7 +284,7 @@ All keys live in `config/flow-admin.php`. They are also overridable via environm
 
 Every mutation route (resume, reject, replay, cancel, retry-webhook, Studio's edit-graph load, draft save and publish) consults your `ActionAuthorizer` **before** the controller runs. This is non-negotiable: there is no "global admin" bypass and no way to short-circuit the gate from a Blade view.
 
-`ActionAuthorizer::canEditDefinition()` gates the Studio authoring routes: loading a flow's UNREDACTED graph (`GET /studio/{name}/edit-graph`, node `config` included — unlike the read-only canvas's `graph()` endpoint, which redacts it), saving an edited graph as a new draft (`POST /studio/{name}/draft`), and publishing a draft version (`POST /studio/{name}/publish`). The default `DenyAllAuthorizer` denies them all; ship your own `ActionAuthorizer` (or set `FLOW_ADMIN_AUTHORIZER=allow` for local dev/E2E — see `AllowAllAuthorizer`, dev-only, never production) to enable Studio editing. The version-list and diff read endpoints (`GET /studio/{name}/version-list`, `GET /studio/{name}/diff`) carry no node `config` and so sit at the same visibility level as the read-only `graph()` endpoint.
+`ActionAuthorizer::canEditDefinition()` gates the Studio authoring routes: loading a flow's UNREDACTED graph (`GET /studio/{name}/edit-graph`, node `config` included — unlike the read-only canvas's `graph()` endpoint, which redacts it), saving an edited graph as a new draft (`POST /studio/{name}/draft`), publishing a draft version (`POST /studio/{name}/publish`), and generating a draft graph from a natural-language prompt (`POST /studio/{name}/ai-build` — it reveals graph structure and spends a billable model call, so it sits behind the same authoring gate; it never persists, the operator saves the reviewed result through `/draft`). The default `DenyAllAuthorizer` denies them all; ship your own `ActionAuthorizer` (or set `FLOW_ADMIN_AUTHORIZER=allow` for local dev/E2E — see `AllowAllAuthorizer`, dev-only, never production) to enable Studio editing. The version-list and diff read endpoints (`GET /studio/{name}/version-list`, `GET /studio/{name}/diff`) carry no node `config` and so sit at the same visibility level as the read-only `graph()` endpoint.
 
 `GET /studio/catalog` (the editor palette's node-type catalog) is deliberately **not** gated by `canEditDefinition()` — it returns node-type metadata only (names, categories, port shapes), never a flow's `config`, so it's reachable by any request that clears the base `flow-admin.middleware` stack (typically `web,auth`). If your node-type names/descriptions are themselves sensitive, gate this route yourself (e.g. wrap it in additional middleware) before exposing Studio.
 
@@ -358,6 +359,7 @@ All routes live under the configured prefix (default `/flow`) and the `flow-admi
 | `GET` | `/studio/{name}/edit` | `flow-admin.studio.edit` | Studio editor shell — palette, drag & drop, typed-connection validation, node inspector, save-as-draft |
 | `GET` | `/studio/{name}/edit-graph` | `flow-admin.studio.edit-graph` | JSON API backing the editor: `{graph, catalog, version, status}` with node `config` INCLUDED (unredacted) — gated by `ActionAuthorizer::canEditDefinition()`, deny-by-default |
 | `POST` | `/studio/{name}/draft` | `flow-admin.studio.draft` | Saves the edited graph as a new draft version; server re-validates structurally and semantically (`GraphValidator`) before persisting — gated by `ActionAuthorizer::canEditDefinition()` |
+| `POST` | `/studio/{name}/ai-build` | `flow-admin.studio.ai-build` | Generates an already-validated draft graph from a natural-language prompt via `padosoft/laravel-flow-ai` (never persists — returns the envelope for review) — gated by `ActionAuthorizer::canEditDefinition()`; 404 when the AI package is absent |
 | `GET` | `/runs` | `flow-admin.runs.index` | Runs list |
 | `GET` | `/runs/{id}` | `flow-admin.runs.show` | Run detail + timeline |
 | `GET` | `/approvals` | `flow-admin.approvals.index` | Approvals inbox |
@@ -413,7 +415,7 @@ If you build with Claude Code or another agent, copy `.claude/` into your downst
 
 | Tool | Workflow runs lifecycle | Approvals UI | Webhook outbox | Visual flow editor | Drop-in for Laravel Flow |
 | --- | :---: | :---: | :---: | :---: | :---: |
-| **Laravel Flow Admin** | ✅ | ✅ | ✅ | ✅ drag & drop, typed-connection validation, save-as-draft (E-PR3) | ✅ |
+| **Laravel Flow Admin** | ✅ | ✅ | ✅ | ✅ drag & drop, typed-connection validation, save-as-draft, dry-run planner, **natural-language "Build with AI"** | ✅ |
 | Laravel Horizon | ⚠️ queue/job only | ❌ | ❌ | ❌ | ❌ |
 | Laravel Pulse | ⚠️ app metrics | ❌ | ❌ | ❌ | ❌ |
 | Custom dashboard | depends | depends | depends | depends | ⏳ slow to bootstrap |
@@ -440,13 +442,13 @@ Every push runs through this gate (matrix `php: 8.3, 8.4` × `laravel: 13`):
 composer validate --strict --no-check-publish
 composer format:test          # Laravel Pint
 composer analyse              # PHPStan / Larastan level 8
-composer test                 # PHPUnit — 169 tests, 882 assertions
+composer test                 # PHPUnit — 174 tests, 905 assertions
 npm run lint                  # ESLint flat config
 npm run build                 # Vite build verification
 npm run test:e2e              # Playwright on chromium + firefox + webkit
 ```
 
-Latest local run: **169 tests / 882 assertions / 66 E2E runs passed** (24 Playwright scenarios × 3 browsers, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser limitations on one node-deletion scenario).
+Latest local run: **174 tests / 905 assertions / 72 E2E runs passed** (26 Playwright scenarios × 3 browsers, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser limitations on one node-deletion scenario).
 
 ---
 

@@ -18,12 +18,20 @@
         "illuminate/routing": "^13.0",
         "illuminate/support": "^13.0",
         "illuminate/view": "^13.0",
-        "padosoft/laravel-flow": "dev-main"
+        "padosoft/laravel-flow": "dev-main",
+        "padosoft/laravel-flow-ai": "dev-main"
     },
     "repositories": [
         {
             "type": "path",
             "url": "../padosoft-laravel-flow",
+            "options": {
+                "symlink": false
+            }
+        },
+        {
+            "type": "path",
+            "url": "../laravel-flow-ai",
             "options": {
                 "symlink": false
             }
