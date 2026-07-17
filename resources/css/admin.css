@@ -1044,6 +1044,44 @@ button { background: transparent; border: 0; padding: 0; cursor: pointer; }
 }
 .approval-actions { display: flex; gap: 6px; }
 
+/* Advisor inbox (E-PR8b) */
+.advisor-status {
+  padding: 10px 16px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--border);
+}
+.advisor-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.advisor-card:last-child { border-bottom: 0; }
+.advisor-card:hover { background: var(--bg-hover); }
+.advisor-card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.advisor-card-head b { font-size: 13px; }
+.advisor-draft { color: var(--text-tertiary); font-size: 11.5px; }
+.advisor-summary { margin: 0; font-size: 12.5px; color: var(--text-secondary); }
+/* Flat (no nested card): a left accent + subtle inset, not a bordered box,
+   to respect the "no nested cards" UI rule inside .card > .advisor-card. */
+.advisor-rationale {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 0 6px 10px;
+  border-left: 2px solid var(--border);
+}
+.advisor-rationale-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 30%) 1fr;
+  gap: 10px;
+  font-size: 11.5px;
+}
+.advisor-rationale-row .mono { color: var(--text-tertiary); }
+.advisor-card-actions { display: flex; gap: 6px; }
+
 /* Outbox row */
 .outbox-status {
   display: inline-flex;

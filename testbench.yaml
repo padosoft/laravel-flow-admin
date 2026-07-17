@@ -2,6 +2,14 @@ laravel: '@testbench'
 
 providers:
   - Padosoft\LaravelFlowAdmin\FlowAdminServiceProvider
+  # Registered explicitly so the served E2E app has the AI pack's container
+  # bindings — notably FlowAdvisor, whose constructor takes non-injectable
+  # arrays (analyzers/exposed flows) and therefore CANNOT auto-wire; without
+  # its provider the /advisor/scan endpoint 500s with BindingResolutionException.
+  # A real consumer app gets this via package auto-discovery (the package
+  # declares it in composer extra.laravel.providers); testbench's served app
+  # does not pick up the path-repo sibling's discovery, so list it here.
+  - Padosoft\LaravelFlowAI\LaravelFlowAIServiceProvider
 
 # Env block runs *after* Dotenv via Orchestra\Testbench\Foundation\Bootstrap\
 # LoadEnvironmentVariablesFromArray, so it always wins over the testbench-core
