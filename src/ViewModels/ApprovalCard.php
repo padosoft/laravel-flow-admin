@@ -32,11 +32,16 @@ final readonly class ApprovalCard
     /**
      * Whether the approve/reject action buttons can be wired for this card:
      * only while the approval is still pending AND the adapter surfaced a
-     * token hash (the key `Flow::resumeByHash()`/`rejectByHash()` require).
+     * well-formed token hash (the key `Flow::resumeByHash()`/`rejectByHash()`
+     * require). The hash shape must mirror the mutation routes' `{tokenHash}`
+     * constraint (`[A-Fa-f0-9]{64}`, a SHA-256 hex digest) — otherwise the
+     * button would POST to a URL that 404s at routing time, so fail closed here.
      */
     public function canDecide(): bool
     {
-        return $this->isPending && $this->tokenHash !== null && $this->tokenHash !== '';
+        return $this->isPending
+            && $this->tokenHash !== null
+            && preg_match('/^[A-Fa-f0-9]{64}$/', $this->tokenHash) === 1;
     }
 
     public static function fromDto(ApprovalSummary $dto): self
