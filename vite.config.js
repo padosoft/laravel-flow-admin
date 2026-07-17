@@ -22,6 +22,7 @@ export default defineConfig({
         admin: resolve(here, 'resources/js/admin.js'),
         styles: resolve(here, 'resources/css/admin.css'),
         studio: resolve(here, 'resources/js/studio.jsx'),
+        monitor: resolve(here, 'resources/js/monitor.jsx'),
       },
     },
   },

@@ -22,6 +22,7 @@ final readonly class Step
      * @param  int  $attempts  How many times this step was tried (1 = no retries).
      * @param  list<string>  $dependsOn  Step names that must succeed before this one runs.
      * @param  ?string  $errorMessage  Last error message, sanitised at the source (no stack trace, no secrets).
+     * @param  bool  $cacheHit  True when this step's result was served from the node cache (`#[Cacheable]`) rather than re-executed — rendered as a badge on an otherwise-succeeded step, not a distinct status.
      */
     public function __construct(
         public string $name,
@@ -32,5 +33,6 @@ final readonly class Step
         public int $attempts,
         public array $dependsOn,
         public ?string $errorMessage,
+        public bool $cacheHit = false,
     ) {}
 }

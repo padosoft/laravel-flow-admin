@@ -36,3 +36,8 @@ env:
   FLOW_ADMIN_ADAPTER: array
   FLOW_ADMIN_AUTHORIZER: allow
   DB_CONNECTION: sqlite
+  # E-PR5: the served app reports broadcasting as ENABLED so the live-monitor
+  # E2E can exercise the Echo path (a fake window.Echo injected by the test).
+  # No real broadcaster runs — the flag only drives the monitor page's
+  # data-broadcasting attribute; without an Echo client the page still polls.
+  LARAVEL_FLOW_BROADCASTING_ENABLED: true

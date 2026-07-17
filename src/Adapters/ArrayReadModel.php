@@ -711,6 +711,7 @@ final class ArrayReadModel implements ReadModel
                 static fn (mixed $value): bool => is_string($value),
             )),
             errorMessage: $errorMessage,
+            cacheHit: (bool) ($step['cache_hit'] ?? false),
         );
     }
 

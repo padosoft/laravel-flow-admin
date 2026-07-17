@@ -9,7 +9,7 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![PHP Version](https://img.shields.io/packagist/php-v/padosoft/laravel-flow-admin.svg?style=flat-square)](https://packagist.org/packages/padosoft/laravel-flow-admin)
 [![Laravel](https://img.shields.io/badge/Laravel-%5E13.0-ff2d20?style=flat-square&logo=laravel)](https://laravel.com)
-[![Tests](https://img.shields.io/badge/tests-155%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
+[![Tests](https://img.shields.io/badge/tests-166%20passing-brightgreen?style=flat-square)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![E2E](https://img.shields.io/badge/playwright-chromium%20%7C%20firefox%20%7C%20webkit-45ba4b?style=flat-square&logo=playwright)](https://github.com/padosoft/laravel-flow-admin/actions)
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%208-brightgreen?style=flat-square)](https://phpstan.org/)
 [![Code Style](https://img.shields.io/badge/code%20style-pint-7e22ce?style=flat-square)](https://laravel.com/docs/pint)
@@ -77,12 +77,13 @@
 - 📋 **Flow definitions** — registered workflows, version, last activity at a glance.
 - 🧩 **Flow Studio canvas** — React + `@xyflow/react` visual graph: read-only view of a flow's published version, plus a full drag-and-drop editor (palette from the node catalog, typed-connection validation, node inspector, save-as-draft) gated by your `ActionAuthorizer`.
 - 🗂️ **Flow versioning** — every stored version listed with its draft/published/archived status, one-click **Publish** behind an immutability confirmation (core re-validates on publish), and a node-level **visual diff** between any two versions (added glows green, removed red-dashed, changed amber) computed server-side so no node `config` ever leaves the server.
+- 📡 **Live run monitor** — a per-run page that subscribes to core's private broadcast channel (`node.transitioned` / `run.progress`) via Laravel Echo when broadcasting is enabled, or **falls back to polling** when it isn't. Renders all nine real `NodeState` colors plus a separate ⚡ cache-hit badge on succeeded nodes, with a live progress header. The polled state endpoint carries node states only — never the run's payloads.
 - ⚡ **⌘K command palette** — jump anywhere in two keystrokes.
 - 🎨 **Pixel-perfect dark + light themes** — persisted in cookie, switchable per user.
 - 🛡️ **Deny-by-default authorizer** — every mutation goes through your `ActionAuthorizer`. No accidents.
 - 🔁 **Auto-refreshing pages** — configurable polling (`/flow/api/live`).
 - 🧱 **Adapter pattern** — `eloquent` for prod, `array` for demos / E2E (deterministic seed-42 fixtures).
-- 🧪 **Battle-tested** — 155 PHPUnit tests, 21 Playwright scenarios (63 runs across Chromium / Firefox / WebKit — 57 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario).
+- 🧪 **Battle-tested** — 166 PHPUnit tests, 23 Playwright scenarios (69 runs across Chromium / Firefox / WebKit — 63 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario).
 - 📦 **Zero-coupling** — built on a public `Contracts\*` surface; engine internals stay `@internal`.
 
 ---
@@ -285,6 +286,8 @@ Every mutation route (resume, reject, replay, cancel, retry-webhook, Studio's ed
 
 `GET /studio/catalog` (the editor palette's node-type catalog) is deliberately **not** gated by `canEditDefinition()` — it returns node-type metadata only (names, categories, port shapes), never a flow's `config`, so it's reachable by any request that clears the base `flow-admin.middleware` stack (typically `web,auth`). If your node-type names/descriptions are themselves sensitive, gate this route yourself (e.g. wrap it in additional middleware) before exposing Studio.
 
+**Live monitor broadcasting** — the live run monitor subscribes to core's **private** per-run channel (`{prefix}.run.{runId}`). `padosoft/laravel-flow` emits only and ships **no** channel-authorization callback, so you must authorize the channel in your app's `routes/channels.php` (e.g. `Broadcast::channel('laravel-flow.run.{runId}', fn ($user, $runId) => /* your rule */)`) and enable broadcasting (`LARAVEL_FLOW_BROADCASTING_ENABLED=true`) plus a working Echo client. If the channel isn't authorized (or broadcasting/Echo isn't wired), the monitor **falls back to polling** `GET /runs/{id}/monitor-state` — which returns node lifecycle state and progress only, never the run's payloads.
+
 Public extension surface (semver-stable from `v0.1.0` →):
 
 - `Padosoft\LaravelFlowAdmin\Contracts\ActionAuthorizer`
@@ -436,13 +439,13 @@ Every push runs through this gate (matrix `php: 8.3, 8.4` × `laravel: 13`):
 composer validate --strict --no-check-publish
 composer format:test          # Laravel Pint
 composer analyse              # PHPStan / Larastan level 8
-composer test                 # PHPUnit — 155 tests, 804 assertions
+composer test                 # PHPUnit — 166 tests, 865 assertions
 npm run lint                  # ESLint flat config
 npm run build                 # Vite build verification
 npm run test:e2e              # Playwright on chromium + firefox + webkit
 ```
 
-Latest local run: **155 tests / 804 assertions / 57 E2E runs passed** (21 Playwright scenarios × 3 browsers, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser limitations on one node-deletion scenario).
+Latest local run: **166 tests / 865 assertions / 63 E2E runs passed** (23 Playwright scenarios × 3 browsers, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser limitations on one node-deletion scenario).
 
 ---
 

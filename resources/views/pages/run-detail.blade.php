@@ -7,7 +7,12 @@
                 <h1 class="page-title">{{ $viewModel->summary->flowName }}</h1>
                 <p class="page-sub"><span class="mono">{{ $viewModel->summary->id }}</span> · {{ $viewModel->summary->flowVersion }}</p>
             </div>
-            <x-flow-admin::status-badge :status="$viewModel->summary->status" :label="$viewModel->summary->statusLabel" />
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <a href="{{ route('flow-admin.runs.monitor', ['id' => $viewModel->summary->id]) }}" class="btn" data-testid="run-monitor-link">
+                    Live monitor
+                </a>
+                <x-flow-admin::status-badge :status="$viewModel->summary->status" :label="$viewModel->summary->statusLabel" />
+            </div>
         </div>
 
         <div class="run-grid">
