@@ -34,13 +34,20 @@ const STATE_LABELS = {
   compensated: 'Compensated',
 };
 
+// Core RunRollup's terminal buckets (+ the v1 `compensated` outcome for pct),
+// so the client's recompute agrees with the polled endpoint and the
+// run.progress broadcast for every terminal state, not just succeeded/failed.
+const COMPLETED_STATES = ['succeeded', 'skipped'];
+const FAILED_STATES = ['failed', 'blocked', 'invalid_input', 'dead_letter'];
+const TERMINAL_STATES = [...COMPLETED_STATES, ...FAILED_STATES, 'compensated'];
+
 function recomputeProgress(nodes, base = {}) {
   const total = nodes.length;
-  const completed = nodes.filter((n) => n.state === 'succeeded').length;
-  const failed = nodes.filter((n) => n.state === 'failed').length;
+  const completed = nodes.filter((n) => COMPLETED_STATES.includes(n.state)).length;
+  const failed = nodes.filter((n) => FAILED_STATES.includes(n.state)).length;
+  const settled = nodes.filter((n) => TERMINAL_STATES.includes(n.state)).length;
 
-  // Settled = completed OR failed, matching core's GraphRunProgressUpdated.
-  return { ...base, total, completed, failed, pct: total > 0 ? Math.round(((completed + failed) / total) * 100) : 0 };
+  return { ...base, total, completed, failed, pct: total > 0 ? Math.round((settled / total) * 100) : 0 };
 }
 
 // A `.node.transitioned` broadcast carries {run_id, node_id, node_type,

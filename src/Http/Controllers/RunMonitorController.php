@@ -24,6 +24,15 @@ use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
  */
 final class RunMonitorController extends Controller
 {
+    /** Core RunRollup's "completed" bucket. */
+    private const COMPLETED_STATES = ['succeeded', 'skipped'];
+
+    /** Core RunRollup's "failed" bucket. */
+    private const FAILED_STATES = ['failed', 'blocked', 'invalid_input', 'dead_letter'];
+
+    /** Every terminal state (the two buckets above) plus the v1 `compensated` outcome. */
+    private const TERMINAL_STATES = ['succeeded', 'skipped', 'failed', 'blocked', 'invalid_input', 'dead_letter', 'compensated'];
+
     public function __construct(private readonly ReadModel $readModel) {}
 
     public function show(string $id): View
@@ -78,8 +87,9 @@ final class RunMonitorController extends Controller
         );
 
         $total = count($nodes);
-        $completed = count(array_filter($nodes, static fn (array $n): bool => $n['state'] === 'succeeded'));
-        $failed = count(array_filter($nodes, static fn (array $n): bool => $n['state'] === 'failed'));
+        $completed = count(array_filter($nodes, static fn (array $n): bool => in_array($n['state'], self::COMPLETED_STATES, true)));
+        $failed = count(array_filter($nodes, static fn (array $n): bool => in_array($n['state'], self::FAILED_STATES, true)));
+        $settled = count(array_filter($nodes, static fn (array $n): bool => in_array($n['state'], self::TERMINAL_STATES, true)));
 
         return [
             'run_id' => $detail->summary->id,
@@ -88,11 +98,12 @@ final class RunMonitorController extends Controller
                 'total' => $total,
                 'completed' => $completed,
                 'failed' => $failed,
-                // Settled = completed OR failed, matching core's own
-                // GraphRunProgressUpdated::progressPct() so the polled/live
-                // recomputed value never disagrees with a `run.progress`
-                // broadcast on a run that has failures.
-                'pct' => $total > 0 ? (int) round(($completed + $failed) / $total * 100) : 0,
+                // % settled over total, matching core's RunRollup terminal
+                // buckets (completed = succeeded|skipped, failed = failed|
+                // blocked|invalid_input|dead_letter) plus the v1 `compensated`
+                // step outcome, so a fully-terminal run always reads 100% and
+                // never disagrees with a `run.progress` broadcast.
+                'pct' => $total > 0 ? (int) round($settled / $total * 100) : 0,
             ],
             'nodes' => $nodes,
         ];

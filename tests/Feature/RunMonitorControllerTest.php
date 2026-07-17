@@ -121,6 +121,34 @@ final class RunMonitorControllerTest extends TestCase
         $response->assertJsonPath('progress.pct', 50);
     }
 
+    public function test_monitor_state_counts_every_terminal_state_as_settled(): void
+    {
+        // completed = succeeded|skipped, failed = failed|blocked|invalid_input|
+        // dead_letter (core RunRollup), and v1 `compensated` still counts as
+        // settled — so a fully-terminal run reads 100%, not stuck below it.
+        $repository = Mockery::mock(ReadModel::class);
+        $repository->shouldReceive('findRun')->andReturn(new RunDetail(
+            summary: $this->fakeSummary('run-z', 'compensated'),
+            steps: [
+                new Step('a', 'succeeded', null, null, null, 1, [], null, false),
+                new Step('b', 'skipped', null, null, null, 1, [], null, false),
+                new Step('c', 'dead_letter', null, null, null, 1, [], null, false),
+                new Step('d', 'compensated', null, null, null, 1, [], null, false),
+            ],
+            audit: [],
+            inputPayload: [],
+            outputPayload: [],
+        ));
+        $this->app->instance(ReadModel::class, $repository);
+
+        $response = $this->getJson(route('flow-admin.runs.monitor-state', ['id' => 'run-z']));
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('progress.completed', 2); // succeeded + skipped
+        $response->assertJsonPath('progress.failed', 1);    // dead_letter
+        $response->assertJsonPath('progress.pct', 100);     // all 4 terminal
+    }
+
     public function test_monitor_page_reflects_the_broadcasting_config(): void
     {
         $this->useArrayAdapter();
