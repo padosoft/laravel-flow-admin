@@ -49,3 +49,7 @@ env:
   # a type the array adapter registers, so the server-side GraphValidator pass
   # accepts it.
   FLOW_ADMIN_FAKE_LLM: true
+  # The Studio ai-build route is `throttle:`-limited; its RateLimiter needs a
+  # working cache store. Force the in-memory array store so the served app
+  # doesn't hit testbench's DB-backed cache (which has no `cache` table).
+  CACHE_STORE: array

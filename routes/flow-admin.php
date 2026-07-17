@@ -34,7 +34,14 @@ Route::prefix(config('flow-admin.prefix', 'flow'))
         Route::get('/studio/{name}/diff', [StudioController::class, 'diff'])->name('studio.diff');
         Route::post('/studio/{name}/publish', [StudioController::class, 'publish'])->name('studio.publish');
         Route::post('/studio/{name}/dry-run', [StudioController::class, 'dryRun'])->name('studio.dry-run');
-        Route::post('/studio/{name}/ai-build', [StudioController::class, 'aiBuild'])->name('studio.ai-build');
+        // Rate-limited on TOP of the edit_definition gate: unlike the other
+        // Studio mutations (free, local DB writes), each ai-build call spends a
+        // billable third-party LLM request, so an authorized-but-careless (or
+        // compromised) operator could otherwise run up cost. 12/min per user is
+        // generous for interactive authoring yet caps runaway/scripted spend.
+        Route::post('/studio/{name}/ai-build', [StudioController::class, 'aiBuild'])
+            ->middleware('throttle:12,1')
+            ->name('studio.ai-build');
         Route::get('/studio/{name}', [StudioController::class, 'show'])->name('studio.show');
         Route::get('/runs', [RunsController::class, 'index'])->name('runs.index');
         Route::get('/runs/{id}/monitor', [RunMonitorController::class, 'show'])->name('runs.monitor');

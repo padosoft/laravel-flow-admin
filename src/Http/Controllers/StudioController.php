@@ -16,7 +16,6 @@ use Padosoft\LaravelFlow\Executor\DryRun\DryRunPlanner;
 use Padosoft\LaravelFlow\Graph\Exceptions\DefinitionLifecycleException;
 use Padosoft\LaravelFlow\Graph\Exceptions\DefinitionNotFoundException;
 use Padosoft\LaravelFlow\Graph\Exceptions\InvalidGraphException;
-use Padosoft\LaravelFlow\Graph\GraphDefinition;
 use Padosoft\LaravelFlow\Graph\GraphSerializer;
 use Padosoft\LaravelFlow\Graph\GraphValidator;
 use Padosoft\LaravelFlow\Graph\StoredDefinition;
@@ -451,13 +450,14 @@ final class StudioController extends Controller
             function () use ($request): JsonResponse {
                 $validated = $request->validate([
                     'prompt' => 'required|string|min:3|max:4000',
-                    'model' => 'nullable|string|max:120',
                 ]);
 
                 $prompt = (string) $validated['prompt'];
-                $model = isset($validated['model']) && $validated['model'] !== ''
-                    ? (string) $validated['model']
-                    : (string) config('flow-admin.ai.model', 'claude-sonnet-5');
+                // The model is an OPERATOR cost/policy decision, taken from
+                // config only — deliberately NOT client-supplied, so an actor
+                // with edit rights cannot force an arbitrary/most-expensive
+                // model past the configured default and run up spend.
+                $model = (string) config('flow-admin.ai.model', 'claude-sonnet-5');
 
                 /** @var FlowBuilderService $builder */
                 $builder = app(FlowBuilderService::class);
@@ -479,24 +479,52 @@ final class StudioController extends Controller
                     ], 500);
                 }
 
-                if (! $result->success) {
+                // A real null-check (not just !success) narrows $result->graph
+                // from ?GraphDefinition to GraphDefinition for the serializer —
+                // success() always carries a graph and failed() never does, but
+                // checking the property directly keeps that invariant explicit.
+                if (! $result->success || $result->graph === null) {
                     return response()->json([
                         'success' => false,
                         'message' => 'The AI could not produce a valid graph from that prompt.',
-                        'data' => ['violations' => $result->errors],
+                        // These are usually GraphValidator strings (short, safe —
+                        // same as /draft surfaces), but the AI pack also folds a
+                        // guardrail PolicyDeniedException message into this list,
+                        // which originates outside this package. Bound count +
+                        // length defensively so a future guardrail change can't
+                        // dump large/leaky text straight to the browser.
+                        'data' => ['violations' => $this->boundViolations($result->errors)],
                     ], 422);
                 }
-
-                /** @var GraphDefinition $graph */
-                $graph = $result->graph;
 
                 return response()->json([
                     'success' => true,
                     'message' => 'Draft graph generated. Review it, then save it as a draft.',
-                    'graph' => $this->serializer->toArray($graph),
+                    'graph' => $this->serializer->toArray($result->graph),
                 ]);
             },
             context: ['flowName' => $name],
+        );
+    }
+
+    /**
+     * Defensive bound on the validation reasons returned to the browser from
+     * the AI builder: at most 20 entries, each truncated to 300 chars. The
+     * GraphValidator strings these normally carry are already short; the cap
+     * exists so a future guardrail-layer message (folded into the same list
+     * by the AI pack, outside this package's control) can never dump large or
+     * leaky text to the client unbounded.
+     *
+     * @param  list<string>  $violations
+     * @return list<string>
+     */
+    private function boundViolations(array $violations): array
+    {
+        return array_map(
+            static fn (string $violation): string => mb_strlen($violation) > 300
+                ? mb_substr($violation, 0, 300) . '…'
+                : $violation,
+            array_slice(array_values($violations), 0, 20),
         );
     }
 

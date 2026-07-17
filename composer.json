@@ -18,8 +18,10 @@
         "illuminate/routing": "^13.0",
         "illuminate/support": "^13.0",
         "illuminate/view": "^13.0",
-        "padosoft/laravel-flow": "dev-main",
-        "padosoft/laravel-flow-ai": "dev-main"
+        "padosoft/laravel-flow": "dev-main"
+    },
+    "suggest": {
+        "padosoft/laravel-flow-ai": "Enables the Studio 'Build with AI' panel — turn a natural-language prompt into a validated draft graph. Optional; the admin boots and runs without it (the AI features stay hidden / return 404)."
     },
     "repositories": [
         {
@@ -42,7 +44,8 @@
         "phpunit/phpunit": "^11.0",
         "laravel/pint": "^1.18",
         "phpstan/phpstan": "^2.0",
-        "larastan/larastan": "^3.0"
+        "larastan/larastan": "^3.0",
+        "padosoft/laravel-flow-ai": "dev-main"
     },
     "autoload": {
         "psr-4": {
