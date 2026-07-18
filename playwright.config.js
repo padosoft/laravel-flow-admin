@@ -54,5 +54,18 @@ export default defineConfig({
     timeout: 120_000,
     stdout: 'pipe',
     stderr: 'pipe',
+    // POSIX only: send a TRAPPABLE SIGTERM on teardown instead of Playwright's
+    // default process-group SIGKILL. The supervisor (scripts/serve-testbench.mjs)
+    // spawns the POSIX serve process `detached` (its own process group) so it can
+    // reap the master + its forked PHP_CLI_SERVER_WORKERS workers after a crash;
+    // that same detaching means a group SIGKILL aimed at the Node supervisor would
+    // NOT reach the server, leaving it orphaned on the port (and reused next run
+    // via reuseExistingServer). A SIGTERM lets the supervisor's handler run and
+    // tree-kill the detached group before exiting. On Windows the server is NOT
+    // detached and Playwright's native tree teardown already reaps it cleanly, so
+    // we leave the default there rather than risk a signal-mapping regression.
+    ...(process.platform === 'win32'
+      ? {}
+      : { gracefulShutdown: { signal: 'SIGTERM', timeout: 10_000 } }),
   },
 });
