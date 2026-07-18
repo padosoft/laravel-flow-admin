@@ -112,15 +112,18 @@ const env = {
   FLOW_ADMIN_AUTHORIZER: process.env.FLOW_ADMIN_AUTHORIZER ?? 'allow',
   DB_CONNECTION: 'sqlite',
   DB_DATABASE: e2eDatabasePath,
-  // `testbench serve` → `artisan serve` runs a SINGLE-threaded `php -S` worker,
-  // so one slow request (e.g. a mutation round-trip) blocks every concurrent
-  // request — asset loads, polling — and a whole browser shard cascades into
-  // timeouts (the recurring "different single browser flakes each run" CI
-  // symptom). PHP_CLI_SERVER_WORKERS pre-forks N workers so the built-in server
-  // handles requests concurrently. POSIX only (Linux/macOS CI); PHP ignores it
-  // on Windows, so local Windows runs are unaffected. Overridable; default 4.
-  // NOTE: only takes effect WITH `--no-reload` on the serve command below —
-  // Laravel's ServeCommand otherwise silently falls back to a single worker.
+  // `testbench serve` → `artisan serve` runs a SINGLE-threaded `php -S` worker
+  // by default, so one slow request (e.g. the ~500ms AI advisor scan) blocks
+  // every concurrent request — asset loads, the `/flow/api/live` poll — and can
+  // stall a browser shard. PHP_CLI_SERVER_WORKERS pre-forks N workers so the
+  // built-in server handles requests concurrently. POSIX only (Linux/macOS CI);
+  // PHP ignores it on Windows, so local Windows runs are single-worker.
+  // Overridable; default 4. TWO things are required for this to be SAFE:
+  //   (1) `--no-reload` on the serve command below, or ServeCommand silently
+  //       falls back to a single worker (warning only); and
+  //   (2) the crash SUPERVISOR below — this worker mode is EXPERIMENTAL and
+  //       segfaults silently under load, and a crash otherwise leaves the port
+  //       dead forever (artisan serve never restarts a crashed server).
   PHP_CLI_SERVER_WORKERS: process.env.PHP_CLI_SERVER_WORKERS ?? '4',
 };
 
@@ -184,36 +187,159 @@ if (wal.status !== 0) {
 // single worker with only a warning) unless `--no-reload` is passed and it isn't
 // under Sail. The dev-server's restart-on-.env-change is irrelevant for a
 // short-lived CI/E2E server, so disabling it is free here.
-let child;
-if (process.platform === 'win32') {
-  // Quote the testbench path so spaces (e.g. "Visual Basic") survive.
-  const cmdLine = `php "${testbench}" serve --host=${host} --port=${port} --no-reload`;
-  child = spawn('cmd.exe', ['/d', '/s', '/c', cmdLine], {
-    cwd: repoRoot,
-    stdio: 'inherit',
-    env,
-    windowsVerbatimArguments: true,
-  });
-} else {
-  child = spawn(
+//
+// SUPERVISOR (crash resilience) — the definitive fix for the residual E2E
+// flake. `PHP_CLI_SERVER_WORKERS` runs PHP's EXPERIMENTAL forking built-in
+// server, which segfaults SILENTLY under the E2E load (constant `/flow/api/live`
+// polling + the run-monitor 2.5s poll + Firefox aborting in-flight requests as
+// it navigates between tests). When that `php -S` process dies, `artisan serve`
+// does NOT restart it — ServeCommand's loop only restarts on a `.env` change, so
+// on a crash it just exits and the port stays unbound. Every later request then
+// gets `NS_ERROR_CONNECTION_REFUSED`: the first test to hit the dead server eats
+// its full 30s timeout, then the whole browser shard cascades (this was the
+// recurring "a different single browser flakes each run" CI symptom — verified
+// from a Firefox shard log: fast 0.04ms responses until the server went silent,
+// then 26s of nothing, then CONNECTION_REFUSED on every retry, with no PHP error
+// = a silent segfault). We supervise the serve process and respawn it on any
+// UNEXPECTED exit, so a crash becomes a sub-second port-rebind blip that
+// Playwright's own per-test retries absorb instead of a fatal shard-wide
+// cascade. Migration + WAL ran once above against a persistent DB file and the
+// demo ReadModel is stateless, so a respawn preserves all test state.
+let shuttingDown = false;
+let restarts = 0;
+let rapidDeaths = 0;
+let lastStartAt = 0;
+let handlingFailure = false;
+// Backstop against a genuine crash-loop: give up rather than respawn forever.
+const maxRestarts = Number(process.env.FLOW_ADMIN_E2E_MAX_RESTARTS ?? '100');
+// A server that dies within this window of starting is almost certainly a
+// deterministic boot-time fatal (missing extension, bad flag, port permanently
+// taken), NOT a load-induced segfault — bail fast instead of burning the whole
+// count budget on doomed relaunches.
+const rapidDeathMs = 2000;
+const maxRapidDeaths = 5;
+
+function startServer() {
+  lastStartAt = Date.now();
+  if (process.platform === 'win32') {
+    // Quote the testbench path so spaces (e.g. "Visual Basic") survive.
+    const cmdLine = `php "${testbench}" serve --host=${host} --port=${port} --no-reload`;
+    return spawn('cmd.exe', ['/d', '/s', '/c', cmdLine], {
+      cwd: repoRoot,
+      stdio: 'inherit',
+      env,
+      windowsVerbatimArguments: true,
+    });
+  }
+  // `detached: true` makes the `php` master a process-GROUP leader so we can reap
+  // the WHOLE group — master + its PHP_CLI_SERVER_WORKERS forked workers — via a
+  // negative-pid signal, even after the master itself segfaults. A dead master
+  // never reaps its forked children: they get reparented to init and (with the
+  // worker server's inherited/`SO_REUSEPORT` listening socket) can keep the port
+  // bound, which would make the respawn hit EADDRINUSE and hop to a different
+  // port than Playwright polls. Reaping the group first prevents that.
+  return spawn(
     'php',
     [testbench, 'serve', `--host=${host}`, `--port=${port}`, '--no-reload'],
-    { cwd: repoRoot, stdio: 'inherit', env },
+    { cwd: repoRoot, stdio: 'inherit', env, detached: true },
   );
 }
 
-const forward = (signal) => () => {
-  if (!child.killed) {
-    child.kill(signal);
+// Kill the whole tree, not just the tracked handle: on POSIX the negative pid
+// targets the process group (see `detached` above); on Windows `child` is a
+// `cmd.exe` wrapper whose `php.exe` grandchild survives a bare `child.kill()`,
+// so use `taskkill /T` to walk the tree. Swallows ESRCH ("already gone").
+function killTree(proc, signal) {
+  if (!proc || proc.pid === undefined) {
+    return;
   }
+  try {
+    if (process.platform === 'win32') {
+      spawnSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' });
+    } else {
+      process.kill(-proc.pid, signal);
+    }
+  } catch {
+    // Process/group already exited — nothing to reap.
+  }
+}
+
+// Both `exit` (process died) and `error` (spawn failed — EAGAIN/ENOENT, or
+// cmd.exe failing to launch) must drive the supervisor; wiring only `exit`
+// would let a spawn failure hang silently until Playwright's webServer poll
+// times out with no explanation.
+function supervise(proc) {
+  proc.on('exit', (code, signal) => handleFailure(`exit code=${code} signal=${signal ?? 'none'}`));
+  proc.on('error', (err) => handleFailure(`spawn error ${err.code ?? err.message}`));
+  return proc;
+}
+
+let child = supervise(startServer());
+
+const forward = (signal) => () => {
+  shuttingDown = true;
+  killTree(child, signal);
+  // Exit directly rather than waiting for a child `'exit'` event: if the signal
+  // lands DURING the respawn backoff, `child` is already dead (killTree throws
+  // ESRCH and is swallowed) so no `'exit'` would ever fire, and the pending
+  // respawn timer would just `return` on `shuttingDown` — leaving the supervisor
+  // hung forever with the signal handlers keeping the event loop alive. The
+  // `process.on('exit')` reap below still SIGKILLs whatever group is current.
+  process.exit(0);
 };
 process.on('SIGINT', forward('SIGINT'));
 process.on('SIGTERM', forward('SIGTERM'));
+// Last-ditch reap on ANY exit path (give-up, clean shutdown) so a detached
+// group can't outlive the supervisor. Sync-only work — safe in an exit handler.
+process.on('exit', () => killTree(child, 'SIGKILL'));
 
-child.on('exit', (code, signal) => {
-  if (signal) {
+function handleFailure(reason) {
+  // Our own teardown (Playwright stopping the webServer): exit cleanly.
+  if (shuttingDown) {
     process.exit(0);
     return;
   }
-  process.exit(code ?? 0);
-});
+  // `exit` and `error` can both fire for one death — act on it once.
+  if (handlingFailure) {
+    return;
+  }
+  handlingFailure = true;
+
+  // Reap any workers the dead master left behind BEFORE rebinding the port.
+  killTree(child, 'SIGKILL');
+
+  const uptime = Date.now() - lastStartAt;
+  rapidDeaths = uptime < rapidDeathMs ? rapidDeaths + 1 : 0;
+  restarts += 1;
+
+  if (restarts >= maxRestarts || rapidDeaths >= maxRapidDeaths) {
+    const why =
+      rapidDeaths >= maxRapidDeaths
+        ? `${rapidDeaths} back-to-back deaths within ${rapidDeathMs}ms of starting (a boot-time fatal, not a transient segfault)`
+        : `the ${maxRestarts}-restart backstop`;
+    console.error(
+      `[serve-testbench] serve process failed (${reason}); giving up — hit ${why}.`,
+    );
+    process.exit(1);
+    return;
+  }
+
+  console.error(
+    `[serve-testbench] serve process failed (${reason}); respawning (restart #${restarts}) ` +
+      "so Playwright never sees a dead port. Likely a silent segfault of PHP's " +
+      'experimental multi-worker built-in server.',
+  );
+
+  // Brief pause so the listening socket is fully released before rebinding the
+  // SAME port. `php -S` sets SO_REUSEADDR so immediate rebind usually works, but
+  // a short wait (plus the group reap above) avoids the EADDRINUSE that would
+  // make `artisan serve` hop to another port (canTryAnotherPort) and desync from
+  // the URL Playwright polls.
+  setTimeout(() => {
+    if (shuttingDown) {
+      return;
+    }
+    handlingFailure = false;
+    child = supervise(startServer());
+  }, 500);
+}

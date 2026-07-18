@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-07-18
+
+### Fixed
+- **E2E CI reliability (definitive fix)** — completes the `v2.0.1` concurrency change. Root-caused the residual single-browser-shard flake from a CI shard log: the server served fast (~0.04ms) until it went **silent mid-run**, then every request got `NS_ERROR_CONNECTION_REFUSED` with **no PHP error logged** — a **silent segfault** of PHP's *experimental* `PHP_CLI_SERVER_WORKERS` forking built-in server (stressed by the constant `/flow/api/live` poll + the run-monitor 2.5s poll + the browser aborting in-flight requests as it navigates). Because Laravel's `ServeCommand` never restarts a *crashed* server (its loop only restarts on a `.env` change), the port stayed dead and the whole shard cascaded into timeouts. `scripts/serve-testbench.mjs` now **supervises the serve process and respawns it on any unexpected exit**, turning a fatal 30s-then-cascade crash into a sub-second port-rebind blip that Playwright's per-test retries absorb. Dev/CI harness only — no change to the shipped package or its runtime.
+
 ## [2.0.1] - 2026-07-18
 
 ### Fixed
