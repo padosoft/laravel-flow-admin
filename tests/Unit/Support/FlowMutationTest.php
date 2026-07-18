@@ -7,6 +7,7 @@ namespace Padosoft\LaravelFlowAdmin\Tests\Unit\Support;
 use Padosoft\LaravelFlow\Exceptions\ApprovalPersistenceException;
 use Padosoft\LaravelFlow\Exceptions\FlowExecutionException;
 use Padosoft\LaravelFlow\Exceptions\FlowInputException;
+use Padosoft\LaravelFlow\Exceptions\PersistenceUnavailableException;
 use Padosoft\LaravelFlowAdmin\Support\FlowMutation;
 use Padosoft\LaravelFlowAdmin\Tests\TestCase;
 use RuntimeException;
@@ -75,15 +76,29 @@ final class FlowMutationTest extends TestCase
         $this->assertSame('Flow run [r_1] is not terminal and cannot be replayed.', $response->getData(true)['message']);
     }
 
-    public function test_approval_persistence_exception_maps_to_503_without_leaking_its_message(): void
+    public function test_persistence_unavailable_exception_maps_to_503_without_leaking_its_message(): void
     {
+        // The distinct persistence-outage type raised by cancel/replay/redeliver
+        // (and, as a subtype, approvals) → retryable 503, not a 409 conflict.
+        $response = FlowMutation::run(function (): string {
+            throw new PersistenceUnavailableException('SQLSTATE[HY000] no such table: flow_runs');
+        });
+
+        $this->assertSame(503, $response->getStatusCode());
+        // Generic message — the raw persistence message can carry DB internals.
+        $this->assertSame('The flow store is unavailable. Try again later.', $response->getData(true)['message']);
+    }
+
+    public function test_approval_persistence_exception_still_maps_to_503_via_the_parent_catch(): void
+    {
+        // ApprovalPersistenceException is a subtype of PersistenceUnavailableException,
+        // so the single 503 catch still covers the approval-store outage.
         $response = FlowMutation::run(function (): string {
             throw new ApprovalPersistenceException('SQLSTATE[HY000] no such table: flow_approvals');
         });
 
         $this->assertSame(503, $response->getStatusCode());
-        // Generic message — the raw persistence message can carry DB internals.
-        $this->assertSame('The approval store is unavailable. Try again later.', $response->getData(true)['message']);
+        $this->assertSame('The flow store is unavailable. Try again later.', $response->getData(true)['message']);
     }
 
     public function test_an_unexpected_throwable_maps_to_a_sanitized_500(): void
