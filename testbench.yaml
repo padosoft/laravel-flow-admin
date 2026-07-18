@@ -8,7 +8,8 @@ providers:
   # its provider the /advisor/scan endpoint 500s with BindingResolutionException.
   # A real consumer app gets this via package auto-discovery (the package
   # declares it in composer extra.laravel.providers); testbench's served app
-  # does not pick up the path-repo sibling's discovery, so list it here.
+  # does not auto-discover a require-dev-only package the way a real consumer
+  # app does, so list it here.
   - Padosoft\LaravelFlowAI\LaravelFlowAIServiceProvider
 
 # Env block runs *after* Dotenv via Orchestra\Testbench\Foundation\Bootstrap\

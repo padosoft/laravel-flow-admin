@@ -119,13 +119,12 @@
 | --- | --- |
 | PHP | `^8.3` (also tested on 8.4) |
 | Laravel | `^13.0` |
-| [`padosoft/laravel-flow`](https://github.com/padosoft/laravel-flow) | `dev-main` (development-time — see note below) |
+| [`padosoft/laravel-flow`](https://github.com/padosoft/laravel-flow) | `^2.0` |
+| [`padosoft/laravel-flow-ai`](https://github.com/padosoft/laravel-flow-ai) (optional — unlocks the AI features) | `^1.0` |
 | Node.js (only if you want to rebuild assets) | `>=20` |
 | Database | any Laravel-supported driver (or `array` adapter for demos) |
 
 > 💡 You **do not** need Node.js to use this package. Pre-built assets ship inside the package and are publishable via `vendor:publish`.
-
-> 🚧 **Development-time note**: this repo is mid-flight on the **Laravel Flow 2.0 program** (Macro E, Flow Studio UI). `padosoft/laravel-flow` has no v2 tagged release yet, so `composer.json` resolves it via a local `path` repository pointing at `../padosoft-laravel-flow` (a sibling checkout one directory up). That means `padosoft/laravel-flow-admin` is not `composer require`-able outside a monorepo-adjacent dev setup until core tags v2.0.0 — at which point this switches back to a normal SemVer range.
 
 ---
 

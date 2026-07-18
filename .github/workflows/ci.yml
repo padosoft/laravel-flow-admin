@@ -31,24 +31,9 @@ jobs:
         with:
           path: laravel-flow-admin
 
-      # padosoft/laravel-flow has no v2 tagged release yet, so composer.json
-      # resolves it via a local path repository ("../padosoft-laravel-flow"
-      # relative to this package's root) — mirror that layout here by
-      # checking core out as a TRUE sibling directory, one level up from
-      # laravel-flow-admin, matching what a local dev checkout looks like.
-      - name: Checkout padosoft/laravel-flow (path-repo sibling)
-        uses: actions/checkout@v6
-        with:
-          repository: padosoft/laravel-flow
-          ref: main
-          path: padosoft-laravel-flow
-
-      - name: Checkout padosoft/laravel-flow-ai (path-repo sibling)
-        uses: actions/checkout@v6
-        with:
-          repository: padosoft/laravel-flow-ai
-          ref: main
-          path: laravel-flow-ai
+      # padosoft/laravel-flow (^2.0) and padosoft/laravel-flow-ai (^1.0, dev)
+      # are resolved as normal tagged dependencies from Packagist — no sibling
+      # checkout of core/ai is needed; the composer step below fetches them.
 
       - name: Setup PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@v2
@@ -186,21 +171,8 @@ jobs:
         with:
           path: laravel-flow-admin
 
-      # composer install below needs the same path-repo sibling as the php
-      # job — see the comment there for why.
-      - name: Checkout padosoft/laravel-flow (path-repo sibling)
-        uses: actions/checkout@v6
-        with:
-          repository: padosoft/laravel-flow
-          ref: main
-          path: padosoft-laravel-flow
-
-      - name: Checkout padosoft/laravel-flow-ai (path-repo sibling)
-        uses: actions/checkout@v6
-        with:
-          repository: padosoft/laravel-flow-ai
-          ref: main
-          path: laravel-flow-ai
+      # core (^2.0) and ai (^1.0) are resolved from Packagist — no sibling
+      # checkout needed (see the php job for the same note).
 
       - name: Detect manifests
         id: pkg
