@@ -60,8 +60,13 @@ final class FlowMutation
         } catch (PersistenceUnavailableException $e) {
             // Persistence outage (migrations missing / DB unreachable) from any
             // seam, incl. ApprovalPersistenceException (a subtype). Retryable →
-            // 503. Caught BEFORE the FlowExecutionException parent.
-            self::logUnexpected($e);
+            // 503. Caught BEFORE the FlowExecutionException parent. Logged with
+            // a DISTINCT message (not logUnexpected's) so a handled infra outage
+            // is separable from a genuine 500 in alerting/triage; class only —
+            // the raw message can carry DB internals.
+            Log::warning('laravel-flow-admin: a flow mutation hit a persistence outage', [
+                'exception' => $e::class,
+            ]);
 
             return self::fail('The flow store is unavailable. Try again later.', 503);
         } catch (FlowExecutionException $e) {
