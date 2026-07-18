@@ -722,9 +722,12 @@ final class EloquentReadModelTest extends TestCase
 
     public function test_kpi_window_boundary_does_not_double_count_a_run(): void
     {
-        // A run started exactly at the current/previous window boundary
-        // must be counted in exactly one of the two windows, not both.
-        $now = new DateTimeImmutable('now', new DateTimeZone(self::UTC));
+        // A run started exactly at the current/previous window boundary must be
+        // counted in exactly one of the two windows, not both. FIXED "now": the
+        // model reads the SAME instant we seed against (injected clock), so the
+        // boundary run is classified deterministically — this used to flake
+        // because the query's own `now` advanced microseconds past the test's.
+        $now = new DateTimeImmutable('2026-06-15 12:00:00', new DateTimeZone(self::UTC));
         $windowStart = $now->sub(new DateInterval('P1D'));
 
         $this->seedRun([
@@ -734,7 +737,7 @@ final class EloquentReadModelTest extends TestCase
             'duration_ms' => 100,
         ]);
 
-        $kpis = $this->makeModel()->kpis();
+        $kpis = $this->makeModel($now)->kpis();
 
         // If the boundary run were double-counted, totalRuns would be 2
         // (present in both the current and previous window aggregates).
@@ -742,12 +745,13 @@ final class EloquentReadModelTest extends TestCase
         $this->assertSame(1, $kpis->deltaTotalRuns);
     }
 
-    private function makeModel(): EloquentReadModel
+    private function makeModel(?DateTimeImmutable $now = null): EloquentReadModel
     {
         return new EloquentReadModel(
             $this->app->make(FlowDashboardReadModel::class),
             $this->app->make(DefinitionRepository::class),
             $this->app->make(NodeRegistry::class),
+            clock: $now !== null ? static fn (): DateTimeImmutable => $now : null,
         );
     }
 

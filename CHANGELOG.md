@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- **E2E CI reliability**: the Testbench serve app now pre-forks `PHP_CLI_SERVER_WORKERS` workers (default 4, overridable) so a slow mutation round-trip no longer blocks the single-threaded `php -S` and cascades a whole browser shard into timeouts (the recurring "a different single browser flakes each run" symptom). POSIX-only; ignored on Windows.
+- **Deterministic KPI window test**: `EloquentReadModel` now derives its KPI window edges from an injectable clock, so a run seeded exactly at a window boundary is classified against the same instant the query uses — removing the microsecond race that made `test_kpi_window_boundary_does_not_double_count_a_run` flaky.
+
 ## [2.0.0] - 2026-07-18
 
 The **Flow Studio** release — a full operator console for the Flow 2.0 engine. Requires [`padosoft/laravel-flow`](https://github.com/padosoft/laravel-flow) `^2.0`; the AI features are unlocked by the optional [`padosoft/laravel-flow-ai`](https://github.com/padosoft/laravel-flow-ai) `^1.0`.

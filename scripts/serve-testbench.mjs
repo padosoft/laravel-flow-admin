@@ -112,6 +112,16 @@ const env = {
   FLOW_ADMIN_AUTHORIZER: process.env.FLOW_ADMIN_AUTHORIZER ?? 'allow',
   DB_CONNECTION: 'sqlite',
   DB_DATABASE: e2eDatabasePath,
+  // `testbench serve` → `artisan serve` runs a SINGLE-threaded `php -S` worker,
+  // so one slow request (e.g. a mutation round-trip) blocks every concurrent
+  // request — asset loads, polling — and a whole browser shard cascades into
+  // timeouts (the recurring "different single browser flakes each run" CI
+  // symptom). PHP_CLI_SERVER_WORKERS pre-forks N workers so the built-in server
+  // handles requests concurrently. POSIX only (Linux/macOS CI); PHP ignores it
+  // on Windows, so local Windows runs are unaffected. Overridable; default 4.
+  // NOTE: only takes effect WITH `--no-reload` on the serve command below —
+  // Laravel's ServeCommand otherwise silently falls back to a single worker.
+  PHP_CLI_SERVER_WORKERS: process.env.PHP_CLI_SERVER_WORKERS ?? '4',
 };
 
 mkdirSync(dirname(e2eDatabasePath), { recursive: true });
@@ -169,10 +179,15 @@ if (wal.status !== 0) {
   process.exit(wal.status ?? 1);
 }
 
+// `--no-reload` is REQUIRED for PHP_CLI_SERVER_WORKERS to take effect: Laravel's
+// ServeCommand::initialize() refuses to honour the worker count (falls back to a
+// single worker with only a warning) unless `--no-reload` is passed and it isn't
+// under Sail. The dev-server's restart-on-.env-change is irrelevant for a
+// short-lived CI/E2E server, so disabling it is free here.
 let child;
 if (process.platform === 'win32') {
   // Quote the testbench path so spaces (e.g. "Visual Basic") survive.
-  const cmdLine = `php "${testbench}" serve --host=${host} --port=${port}`;
+  const cmdLine = `php "${testbench}" serve --host=${host} --port=${port} --no-reload`;
   child = spawn('cmd.exe', ['/d', '/s', '/c', cmdLine], {
     cwd: repoRoot,
     stdio: 'inherit',
@@ -182,7 +197,7 @@ if (process.platform === 'win32') {
 } else {
   child = spawn(
     'php',
-    [testbench, 'serve', `--host=${host}`, `--port=${port}`],
+    [testbench, 'serve', `--host=${host}`, `--port=${port}`, '--no-reload'],
     { cwd: repoRoot, stdio: 'inherit', env },
   );
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelFlowAdmin\Adapters;
 
+use Closure;
 use DateInterval;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -96,11 +97,26 @@ final readonly class EloquentReadModel implements ReadModel
      */
     private const WINDOW_PAGE_SAFETY_CAP = 50;
 
+    /**
+     * @param  (Closure(): DateTimeImmutable)|null  $clock  Injectable "now" for
+     *                                                      the KPI time windows — defaults to the system UTC clock. A test can pass
+     *                                                      a fixed instant so a run seeded exactly at a window boundary is
+     *                                                      classified deterministically (the window edges are derived from the SAME
+     *                                                      instant the query uses), removing the microsecond race between the two.
+     */
     public function __construct(
         private FlowDashboardReadModel $reader,
         private DefinitionRepository $definitions,
         private NodeRegistry $nodeRegistry,
+        private readonly ?Closure $clock = null,
     ) {}
+
+    private function now(): DateTimeImmutable
+    {
+        return $this->clock !== null
+            ? ($this->clock)()
+            : new DateTimeImmutable('now', new DateTimeZone('UTC'));
+    }
 
     public function listRuns(?string $status = null, ?string $flow = null, ?string $query = null, int $page = 1, int $perPage = 25): PaginatedResult
     {
@@ -286,7 +302,7 @@ final readonly class EloquentReadModel implements ReadModel
 
     public function kpis(): KpiSummary
     {
-        $windowNow = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $windowNow = $this->now();
         $windowStart = $windowNow->sub(new DateInterval('P1D'));
         $prevWindowStart = $windowStart->sub(new DateInterval('P1D'));
 
@@ -320,7 +336,7 @@ final readonly class EloquentReadModel implements ReadModel
 
     public function throughputBuckets(): array
     {
-        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $now = $this->now();
         $since = $now->sub(new DateInterval('PT' . self::THROUGHPUT_WINDOW_HOURS . 'H'));
         $runs = $this->runsInWindow($since, $now);
 
