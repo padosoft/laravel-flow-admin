@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Checkout laravel-flow-admin
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: laravel-flow-admin
 
@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Frontend (Node 20)
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Detect package manifest
         id: pkg
@@ -167,7 +167,7 @@ jobs:
 
     steps:
       - name: Checkout laravel-flow-admin
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: laravel-flow-admin
 
