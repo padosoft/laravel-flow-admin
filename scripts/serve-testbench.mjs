@@ -279,6 +279,13 @@ let child = supervise(startServer());
 const forward = (signal) => () => {
   shuttingDown = true;
   killTree(child, signal);
+  // Exit directly rather than waiting for a child `'exit'` event: if the signal
+  // lands DURING the respawn backoff, `child` is already dead (killTree throws
+  // ESRCH and is swallowed) so no `'exit'` would ever fire, and the pending
+  // respawn timer would just `return` on `shuttingDown` — leaving the supervisor
+  // hung forever with the signal handlers keeping the event loop alive. The
+  // `process.on('exit')` reap below still SIGKILLs whatever group is current.
+  process.exit(0);
 };
 process.on('SIGINT', forward('SIGINT'));
 process.on('SIGTERM', forward('SIGTERM'));
