@@ -5,6 +5,26 @@
 
 ---
 
+## 2026-07-18 — The E2E single-browser flake was a SILENT SEGFAULT of the experimental worker server, not a stall — and `artisan serve` never restarts a crashed server
+
+The long-standing "a different single browser flakes each run" CI symptom was mis-diagnosed for months as a single-threaded `testbench serve` **stall** (the standing advice was "re-run the shard"). Reading an actual failing shard log end-to-end told a different story:
+
+- The server served every request in **~0.04ms** up to test #11, then went **completely silent** — 26 s of zero requests.
+- Every retry afterwards failed with **`page.goto: NS_ERROR_CONNECTION_REFUSED`** — the port was DEAD, not slow.
+- **No PHP error/fatal/warning was logged.** A crash with no error output = a **segfault**.
+
+Root cause: `PHP_CLI_SERVER_WORKERS` (added in v2.0.1 for concurrency) runs PHP's **experimental forking** built-in server, which segfaults silently under the E2E load (constant `/flow/api/live` poll + the run-monitor 2.5 s poll + the browser aborting in-flight requests as it navigates between tests). And crucially: **Laravel's `ServeCommand` does NOT restart a crashed server** — its `while ($process->isRunning())` loop only restarts on a `.env` mtime change (gated by `!--no-reload`); when `php -S` dies the loop just exits and the port stays unbound forever. So the first test to hit the corpse eats its full 30 s timeout and the whole shard cascades on CONNECTION_REFUSED.
+
+The v2.0.1 worker fix therefore traded a self-recovering stall for a **non-recovering crash** — median improved, tail got worse.
+
+**Fix (definitive): supervise + respawn.** `scripts/serve-testbench.mjs` now owns a supervisor: on any UNEXPECTED child exit (not our own SIGTERM/SIGINT teardown) it respawns the serve process after a 500 ms socket-release pause, capped by a restart backstop. A crash becomes a sub-second port-rebind blip that Playwright's per-test retries (`retries: CI ? 2 : 0`) absorb. Verified locally by killing the live listener and asserting the port serves again via a NEW pid.
+
+**How to apply:**
+- When a dev server "hangs," distinguish **slow** (requests still complete, just late) from **dead** (`ECONNREFUSED`/`NS_ERROR_CONNECTION_REFUSED`, zero requests served). They have opposite fixes — concurrency vs. supervision. Read the server's own request log across the whole failure window, not just the test's final error line.
+- A **silent** death (no error output) is a segfault/OOM, not an application exception — look at the process/runtime layer, not the app code.
+- `PHP_CLI_SERVER_WORKERS` is experimental and crash-prone; if you use it, you MUST supervise the process, because `artisan serve` will not.
+- The migrate + WAL steps run ONCE against a persistent DB file and the demo ReadModel is stateless, so respawning the serve process mid-run preserves all test state — supervision is safe here.
+
 ## 2026-07-18 — Macro E Gate G3: the full-branch review catches gating gaps a per-subtask diff can't
 
 The macro-gate full-diff review of `task/v2e-studio` vs `main` (all of Macro E in one shot) surfaced two authorization consistency issues that every per-subtask PR review missed because each only saw its OWN slice:

@@ -112,15 +112,18 @@ const env = {
   FLOW_ADMIN_AUTHORIZER: process.env.FLOW_ADMIN_AUTHORIZER ?? 'allow',
   DB_CONNECTION: 'sqlite',
   DB_DATABASE: e2eDatabasePath,
-  // `testbench serve` → `artisan serve` runs a SINGLE-threaded `php -S` worker,
-  // so one slow request (e.g. a mutation round-trip) blocks every concurrent
-  // request — asset loads, polling — and a whole browser shard cascades into
-  // timeouts (the recurring "different single browser flakes each run" CI
-  // symptom). PHP_CLI_SERVER_WORKERS pre-forks N workers so the built-in server
-  // handles requests concurrently. POSIX only (Linux/macOS CI); PHP ignores it
-  // on Windows, so local Windows runs are unaffected. Overridable; default 4.
-  // NOTE: only takes effect WITH `--no-reload` on the serve command below —
-  // Laravel's ServeCommand otherwise silently falls back to a single worker.
+  // `testbench serve` → `artisan serve` runs a SINGLE-threaded `php -S` worker
+  // by default, so one slow request (e.g. the ~500ms AI advisor scan) blocks
+  // every concurrent request — asset loads, the `/flow/api/live` poll — and can
+  // stall a browser shard. PHP_CLI_SERVER_WORKERS pre-forks N workers so the
+  // built-in server handles requests concurrently. POSIX only (Linux/macOS CI);
+  // PHP ignores it on Windows, so local Windows runs are single-worker.
+  // Overridable; default 4. TWO things are required for this to be SAFE:
+  //   (1) `--no-reload` on the serve command below, or ServeCommand silently
+  //       falls back to a single worker (warning only); and
+  //   (2) the crash SUPERVISOR below — this worker mode is EXPERIMENTAL and
+  //       segfaults silently under load, and a crash otherwise leaves the port
+  //       dead forever (artisan serve never restarts a crashed server).
   PHP_CLI_SERVER_WORKERS: process.env.PHP_CLI_SERVER_WORKERS ?? '4',
 };
 
@@ -184,25 +187,52 @@ if (wal.status !== 0) {
 // single worker with only a warning) unless `--no-reload` is passed and it isn't
 // under Sail. The dev-server's restart-on-.env-change is irrelevant for a
 // short-lived CI/E2E server, so disabling it is free here.
-let child;
-if (process.platform === 'win32') {
-  // Quote the testbench path so spaces (e.g. "Visual Basic") survive.
-  const cmdLine = `php "${testbench}" serve --host=${host} --port=${port} --no-reload`;
-  child = spawn('cmd.exe', ['/d', '/s', '/c', cmdLine], {
-    cwd: repoRoot,
-    stdio: 'inherit',
-    env,
-    windowsVerbatimArguments: true,
-  });
-} else {
-  child = spawn(
+//
+// SUPERVISOR (crash resilience) — the definitive fix for the residual E2E
+// flake. `PHP_CLI_SERVER_WORKERS` runs PHP's EXPERIMENTAL forking built-in
+// server, which segfaults SILENTLY under the E2E load (constant `/flow/api/live`
+// polling + the run-monitor 2.5s poll + Firefox aborting in-flight requests as
+// it navigates between tests). When that `php -S` process dies, `artisan serve`
+// does NOT restart it — ServeCommand's loop only restarts on a `.env` change, so
+// on a crash it just exits and the port stays unbound. Every later request then
+// gets `NS_ERROR_CONNECTION_REFUSED`: the first test to hit the dead server eats
+// its full 30s timeout, then the whole browser shard cascades (this was the
+// recurring "a different single browser flakes each run" CI symptom — verified
+// from a Firefox shard log: fast 0.04ms responses until the server went silent,
+// then 26s of nothing, then CONNECTION_REFUSED on every retry, with no PHP error
+// = a silent segfault). We supervise the serve process and respawn it on any
+// UNEXPECTED exit, so a crash becomes a sub-second port-rebind blip that
+// Playwright's own per-test retries absorb instead of a fatal shard-wide
+// cascade. Migration + WAL ran once above against a persistent DB file and the
+// demo ReadModel is stateless, so a respawn preserves all test state.
+let shuttingDown = false;
+let restarts = 0;
+// Backstop against a genuine crash-loop (e.g. the port is permanently taken, or
+// a boot-time fatal): give up rather than respawn forever.
+const maxRestarts = Number(process.env.FLOW_ADMIN_E2E_MAX_RESTARTS ?? '100');
+
+function startServer() {
+  if (process.platform === 'win32') {
+    // Quote the testbench path so spaces (e.g. "Visual Basic") survive.
+    const cmdLine = `php "${testbench}" serve --host=${host} --port=${port} --no-reload`;
+    return spawn('cmd.exe', ['/d', '/s', '/c', cmdLine], {
+      cwd: repoRoot,
+      stdio: 'inherit',
+      env,
+      windowsVerbatimArguments: true,
+    });
+  }
+  return spawn(
     'php',
     [testbench, 'serve', `--host=${host}`, `--port=${port}`, '--no-reload'],
     { cwd: repoRoot, stdio: 'inherit', env },
   );
 }
 
+let child = startServer();
+
 const forward = (signal) => () => {
+  shuttingDown = true;
   if (!child.killed) {
     child.kill(signal);
   }
@@ -210,10 +240,40 @@ const forward = (signal) => () => {
 process.on('SIGINT', forward('SIGINT'));
 process.on('SIGTERM', forward('SIGTERM'));
 
-child.on('exit', (code, signal) => {
-  if (signal) {
+function handleExit(code, signal) {
+  // Our own teardown (Playwright stopping the webServer): exit cleanly.
+  if (shuttingDown) {
     process.exit(0);
     return;
   }
-  process.exit(code ?? 0);
-});
+
+  if (restarts >= maxRestarts) {
+    console.error(
+      `[serve-testbench] serve process exited unexpectedly (code=${code} signal=${signal}) ` +
+        `and hit the ${maxRestarts}-restart backstop — giving up instead of respawning forever.`,
+    );
+    process.exit(code ?? 1);
+    return;
+  }
+
+  restarts += 1;
+  console.error(
+    `[serve-testbench] serve process exited unexpectedly (code=${code} signal=${signal}); ` +
+      `respawning (restart #${restarts}) so Playwright never sees a dead port. ` +
+      "Likely a silent segfault of PHP's experimental multi-worker built-in server.",
+  );
+
+  // Brief pause so the listening socket is fully released before rebinding the
+  // SAME port. `php -S` sets SO_REUSEADDR so immediate rebind usually works, but
+  // a short wait avoids a rare EADDRINUSE that would make `artisan serve` hop to
+  // another port (canTryAnotherPort) and desync from the URL Playwright polls.
+  setTimeout(() => {
+    if (shuttingDown) {
+      return;
+    }
+    child = startServer();
+    child.on('exit', handleExit);
+  }, 500);
+}
+
+child.on('exit', handleExit);
