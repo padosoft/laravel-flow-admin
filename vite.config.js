@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,6 +12,7 @@ export default defineConfig({
   // Disable the copy: this package ships its compiled assets to `outDir` and
   // does not maintain a separate static-public source tree.
   publicDir: false,
+  plugins: [react()],
   build: {
     outDir: 'public/vendor/flow-admin',
     emptyOutDir: true,
@@ -19,6 +21,8 @@ export default defineConfig({
       input: {
         admin: resolve(here, 'resources/js/admin.js'),
         styles: resolve(here, 'resources/css/admin.css'),
+        studio: resolve(here, 'resources/js/studio.jsx'),
+        monitor: resolve(here, 'resources/js/monitor.jsx'),
       },
     },
   },

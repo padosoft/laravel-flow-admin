@@ -55,4 +55,66 @@ final class ArrayReadModelTest extends TestCase
         $this->assertSame(120, $query->total);
         $this->assertNotEmpty($query->items);
     }
+
+    public function test_array_read_model_returns_a_fixture_graph_for_the_known_flow(): void
+    {
+        $result = (new ArrayReadModel)->graph('order_checkout_flow');
+
+        $this->assertNotNull($result);
+        $this->assertSame(1, $result['graph']['schema_version']);
+        $this->assertCount(4, $result['graph']['nodes']);
+        $this->assertCount(3, $result['graph']['connections']);
+
+        // Exercises 3 distinct PortTypes across the graph's wires, so the
+        // canvas has something real to color-code.
+        $this->assertSame('json', $result['catalog']['demo.trigger']['outputs'][0]['type']);
+        $this->assertSame('bool', $result['catalog']['demo.validate']['outputs'][0]['type']);
+        $this->assertSame('text', $result['catalog']['demo.charge']['outputs'][0]['type']);
+
+        // The fixture's 'charge' node carries a fake secret-shaped config
+        // key on purpose — proves GraphRedactor strips it before this
+        // response leaves the adapter.
+        foreach ($result['graph']['nodes'] as $node) {
+            $this->assertArrayNotHasKey('config', $node);
+        }
+    }
+
+    public function test_array_read_model_returns_null_graph_for_an_unknown_flow(): void
+    {
+        $this->assertNull((new ArrayReadModel)->graph('does-not-exist'));
+    }
+
+    public function test_array_read_model_editable_graph_includes_unredacted_config(): void
+    {
+        $result = (new ArrayReadModel)->editableGraph('order_checkout_flow');
+
+        $this->assertNotNull($result);
+        $this->assertSame(1, $result['version']);
+        $this->assertSame('published', $result['status']);
+
+        $charge = null;
+        foreach ($result['graph']['nodes'] as $node) {
+            if ($node['id'] === 'charge') {
+                $charge = $node;
+            }
+        }
+
+        $this->assertNotNull($charge);
+        $this->assertSame(['api_key' => 'sk_test_fixture_do_not_leak'], $charge['config']);
+    }
+
+    public function test_array_read_model_returns_null_editable_graph_for_an_unknown_flow(): void
+    {
+        $this->assertNull((new ArrayReadModel)->editableGraph('does-not-exist'));
+    }
+
+    public function test_array_read_model_catalog_returns_all_fixture_node_types(): void
+    {
+        $catalog = (new ArrayReadModel)->catalog();
+
+        $this->assertSame(
+            ['demo.trigger', 'demo.validate', 'demo.charge', 'demo.notify'],
+            array_keys($catalog),
+        );
+    }
 }

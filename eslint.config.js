@@ -1,5 +1,7 @@
 import js from '@eslint/js';
 import globals from 'globals';
+import react from 'eslint-plugin-react';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 export default [
   {
@@ -26,6 +28,27 @@ export default [
         'warn',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
+    },
+  },
+  {
+    files: ['resources/js/**/*.jsx'],
+    ...react.configs.flat.recommended,
+    ...react.configs.flat['jsx-runtime'],
+    plugins: {
+      ...react.configs.flat.recommended.plugins,
+      'react-hooks': reactHooks,
+    },
+    rules: {
+      ...react.configs.flat.recommended.rules,
+      ...react.configs.flat['jsx-runtime'].rules,
+      ...reactHooks.configs['recommended-latest'].rules,
+      // No `prop-types` package in this project (no TypeScript either) —
+      // runtime prop validation isn't part of this codebase's tooling, so
+      // this rule would only ever fire false positives.
+      'react/prop-types': 'off',
+    },
+    settings: {
+      react: { version: 'detect' },
     },
   },
   {

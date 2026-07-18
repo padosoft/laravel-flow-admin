@@ -21,9 +21,34 @@ jobs:
       fail-fast: false
       matrix:
         php: ['8.3', '8.4']
+    defaults:
+      run:
+        working-directory: laravel-flow-admin
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout laravel-flow-admin
+        uses: actions/checkout@v6
+        with:
+          path: laravel-flow-admin
+
+      # padosoft/laravel-flow has no v2 tagged release yet, so composer.json
+      # resolves it via a local path repository ("../padosoft-laravel-flow"
+      # relative to this package's root) — mirror that layout here by
+      # checking core out as a TRUE sibling directory, one level up from
+      # laravel-flow-admin, matching what a local dev checkout looks like.
+      - name: Checkout padosoft/laravel-flow (path-repo sibling)
+        uses: actions/checkout@v6
+        with:
+          repository: padosoft/laravel-flow
+          ref: main
+          path: padosoft-laravel-flow
+
+      - name: Checkout padosoft/laravel-flow-ai (path-repo sibling)
+        uses: actions/checkout@v6
+        with:
+          repository: padosoft/laravel-flow-ai
+          ref: main
+          path: laravel-flow-ai
 
       - name: Setup PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@v2
@@ -41,11 +66,11 @@ jobs:
           restore-keys: composer-${{ matrix.php }}-
 
       - name: Validate composer.json
-        if: hashFiles('composer.json') != ''
+        if: hashFiles('laravel-flow-admin/composer.json') != ''
         run: composer validate --strict --no-check-publish
 
       - name: Install dependencies (lockfile-aware)
-        if: hashFiles('composer.json') != ''
+        if: hashFiles('laravel-flow-admin/composer.json') != ''
         run: |
           if [ -f composer.lock ]; then
             composer install --prefer-dist --no-interaction --no-progress
@@ -54,19 +79,19 @@ jobs:
           fi
 
       - name: Run Pint (style check)
-        if: hashFiles('composer.json') != '' && matrix.php == '8.4'
+        if: hashFiles('laravel-flow-admin/composer.json') != '' && matrix.php == '8.4'
         run: composer format:test
 
       - name: Run PHPStan
-        if: hashFiles('composer.json') != ''
+        if: hashFiles('laravel-flow-admin/composer.json') != ''
         run: composer analyse
 
       - name: Run PHPUnit suites
-        if: hashFiles('composer.json') != ''
+        if: hashFiles('laravel-flow-admin/composer.json') != ''
         run: composer test
 
       - name: PHP gate skipped (no composer.json yet)
-        if: hashFiles('composer.json') == ''
+        if: hashFiles('laravel-flow-admin/composer.json') == ''
         run: echo "composer.json not present yet — Macro 2 will introduce it."
 
   frontend:
@@ -120,6 +145,25 @@ jobs:
         if: steps.pkg.outputs.present == 'true'
         run: npm run build --if-present
 
+      # Built once here, shared with all 3 e2e browser-matrix legs via
+      # actions/download-artifact — each matrix leg is a fully separate
+      # runner/checkout, so without this every leg would run its own
+      # `npm run build` (same Vite input, same output, 3x the compute
+      # for zero difference in result).
+      - name: Upload built assets for e2e reuse
+        if: steps.pkg.outputs.present == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: flow-admin-built-assets
+          path: public/vendor/flow-admin/
+          retention-days: 1
+          # Vite's manifest lives at the hidden .vite/manifest.json — the
+          # action's default (include-hidden-files: false) silently drops
+          # it, so the downloaded copy has the built JS/CSS but no
+          # manifest, and AbstractManifestAssetController 404s everything
+          # (confirmed in CI: "4 files uploaded" instead of the real 5).
+          include-hidden-files: true
+
       - name: Frontend gate skipped (no package.json yet)
         if: steps.pkg.outputs.present != 'true'
         run: echo "package.json not present yet — Macro 2 will introduce it."
@@ -132,9 +176,31 @@ jobs:
       fail-fast: false
       matrix:
         browser: ['chromium', 'firefox', 'webkit']
+    defaults:
+      run:
+        working-directory: laravel-flow-admin
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout laravel-flow-admin
+        uses: actions/checkout@v6
+        with:
+          path: laravel-flow-admin
+
+      # composer install below needs the same path-repo sibling as the php
+      # job — see the comment there for why.
+      - name: Checkout padosoft/laravel-flow (path-repo sibling)
+        uses: actions/checkout@v6
+        with:
+          repository: padosoft/laravel-flow
+          ref: main
+          path: padosoft-laravel-flow
+
+      - name: Checkout padosoft/laravel-flow-ai (path-repo sibling)
+        uses: actions/checkout@v6
+        with:
+          repository: padosoft/laravel-flow-ai
+          ref: main
+          path: laravel-flow-ai
 
       - name: Detect manifests
         id: pkg
@@ -172,7 +238,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: laravel-flow-admin/package-lock.json
 
       - name: Setup Node (no cache, no lockfile yet)
         if: steps.pkg.outputs.node == 'true' && steps.pkg.outputs.lockfile != 'true'
@@ -199,19 +265,57 @@ jobs:
         if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
+      # Reuse the SAME build the `frontend` job already produced and
+      # uploaded, instead of every matrix leg (chromium/firefox/webkit —
+      # 3 fully separate runners) rebuilding the identical output. Falls
+      # back to a real local build if the artifact is missing (e.g. the
+      # `frontend` job's build step was itself skipped) so this job never
+      # silently runs against a stale/absent bundle.
+      - name: Download built assets from the frontend job
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
+        id: download-assets
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: flow-admin-built-assets
+          # `download-artifact` is a `uses:` step — `defaults.run.working-directory`
+          # only applies to `run:` (shell) steps, so this must be prefixed
+          # with the checkout subdirectory explicitly (same reason the
+          # Playwright-report upload below is `laravel-flow-admin/playwright-report/`).
+          path: laravel-flow-admin/public/vendor/flow-admin/
+
+      - name: Build assets (fallback — artifact download failed or was skipped)
+        if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true' && steps.download-assets.outcome != 'success'
+        run: npm run build
+
       - name: Run Playwright (${{ matrix.browser }})
         if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         env:
           FLOW_ADMIN_MIDDLEWARE: web
           FLOW_ADMIN_ADAPTER: array
-        run: npm run test:e2e -- --project=${{ matrix.browser }}
+        run: npx playwright test --project=${{ matrix.browser }}
+
+      # The served testbench app's exceptions (e.g. a save-as-draft failure
+      # caught in StudioController::storeDraft and logged, not returned) land
+      # in Laravel's log, NOT in the Playwright/webServer stdout — so a server
+      # 500 behind an E2E failure is otherwise invisible in CI. Surface it.
+      - name: Dump testbench application log on failure
+        if: failure() && steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
+        run: |
+          LOG="vendor/orchestra/testbench-core/laravel/storage/logs/laravel.log"
+          if [ -f "$LOG" ]; then
+            echo "===== $LOG (tail) ====="
+            tail -n 200 "$LOG"
+          else
+            echo "No testbench application log at $LOG."
+          fi
 
       - name: Upload Playwright report
         if: failure() && steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ matrix.browser }}
-          path: playwright-report/
+          path: laravel-flow-admin/playwright-report/
           retention-days: 14
 
       - name: E2E gate skipped (no playwright config yet)

@@ -7,6 +7,7 @@ namespace Padosoft\LaravelFlowAdmin\Adapters;
 use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
+use Padosoft\LaravelFlow\Graph\StoredDefinition;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ApprovalSummary;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\AuditEvent;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\FlowDefinition;
@@ -18,6 +19,7 @@ use Padosoft\LaravelFlowAdmin\Contracts\Dto\Step;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\ThroughputBucket;
 use Padosoft\LaravelFlowAdmin\Contracts\PaginatedResult;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
+use Padosoft\LaravelFlowAdmin\Support\GraphRedactor;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
@@ -134,7 +136,9 @@ final class ArrayReadModel implements ReadModel
                     'requested_at' => $approval['requested_at'] ?? null,
                     'decided_at' => $approval['decided_at'] ?? null,
                     'actor' => (string) ($approval['actor'] ?? 'system'),
-                    'token_hash' => (string) ($approval['token_hash'] ?? sha1($tokenId)),
+                    // SHA-256 (64 hex) so the demo/array approve+reject links
+                    // satisfy the route's 64-hex {tokenHash} constraint.
+                    'token_hash' => (string) ($approval['token_hash'] ?? hash('sha256', $tokenId)),
                     'description' => (string) ($approval['description'] ?? "Approval requested for {$stepName}"),
                 ];
 
@@ -176,8 +180,9 @@ final class ArrayReadModel implements ReadModel
                     continue;
                 }
 
+                $tokenId = (string) ($approval['id'] ?? ('approval_' . substr((string) $run['id'], 0, 8)));
                 $pending[] = $this->mapApproval([
-                    'id' => (string) ($approval['id'] ?? ('approval_' . substr((string) $run['id'], 0, 8))),
+                    'id' => $tokenId,
                     'run_id' => (string) $run['id'],
                     'step_name' => (string) ($approval['step'] ?? 'run'),
                     'status' => 'pending',
@@ -185,6 +190,10 @@ final class ArrayReadModel implements ReadModel
                     'actor' => (string) ($approval['actor'] ?? 'system'),
                     'decided_at' => $approval['decided_at'] ?? null,
                     'description' => (string) ($approval['description'] ?? 'Manual approval required'),
+                    // Parity with listApprovals()'s row: carry a SHA-256 (64 hex)
+                    // token hash so the ApprovalCard can offer approve/reject and
+                    // the demo link satisfies the route's 64-hex constraint.
+                    'token_hash' => (string) ($approval['token_hash'] ?? hash('sha256', $tokenId)),
                 ]);
             }
         }
@@ -373,6 +382,147 @@ final class ArrayReadModel implements ReadModel
         }
 
         return array_values($definitions);
+    }
+
+    /**
+     * Deterministic fixture graph (seed 42, matches the rest of this
+     * adapter) for `order_checkout_flow` — the same id `FLOW_DEFS` already
+     * uses. Exercises 3 distinct `PortType`s (json/bool/text) across its
+     * 3 wires so Playwright/screenshots can assert wire-color-per-type
+     * without a real published definition or `NodeRegistry`.
+     *
+     * Matched by EITHER `FLOW_DEFS`' internal `id` ("order_checkout_flow")
+     * OR its human-readable `name` ("OrderCheckoutFlow") — `definitions()`
+     * (unchanged, pre-existing behaviour) exposes the pretty `name` as
+     * `FlowDefinition::$name`, the same value the Studio index page links
+     * with, so this must accept it too, not just the internal id.
+     */
+    public function graph(string $name): ?array
+    {
+        if (! $this->matchesFixtureFlow($name, 'order_checkout_flow')) {
+            return null;
+        }
+
+        return [
+            'graph' => GraphRedactor::stripNodeConfig($this->fixtureGraphEnvelope()),
+            'catalog' => $this->fixtureCatalog(),
+        ];
+    }
+
+    public function editableGraph(string $name): ?array
+    {
+        if (! $this->matchesFixtureFlow($name, 'order_checkout_flow')) {
+            return null;
+        }
+
+        return [
+            'graph' => $this->fixtureGraphEnvelope(),
+            'catalog' => $this->fixtureCatalog(),
+            'version' => 1,
+            'status' => StoredDefinition::STATUS_PUBLISHED,
+        ];
+    }
+
+    public function catalog(): array
+    {
+        return $this->fixtureCatalog();
+    }
+
+    /**
+     * @return array<string, mixed> a `GraphSerializer::toArray()`-shaped envelope
+     */
+    private function fixtureGraphEnvelope(): array
+    {
+        return [
+            'schema_version' => 1,
+            'kind' => 'laravel-flow',
+            'metadata' => [],
+            'nodes' => [
+                ['id' => 'start', 'type' => 'demo.trigger', 'config' => [], 'position' => ['x' => 0, 'y' => 0]],
+                ['id' => 'validate', 'type' => 'demo.validate', 'config' => [], 'position' => ['x' => 260, 'y' => 0]],
+                // Non-empty config here, on purpose: it is the fixture that
+                // proves GraphRedactor::stripNodeConfig() actually strips a
+                // secret-shaped key before graph() (but not editableGraph())
+                // returns it.
+                ['id' => 'charge', 'type' => 'demo.charge', 'config' => ['api_key' => 'sk_test_fixture_do_not_leak'], 'position' => ['x' => 520, 'y' => 0]],
+                ['id' => 'notify', 'type' => 'demo.notify', 'config' => [], 'position' => ['x' => 780, 'y' => 0]],
+            ],
+            'connections' => [
+                ['sourceNodeId' => 'start', 'sourcePortKey' => 'out', 'targetNodeId' => 'validate', 'targetPortKey' => 'in'],
+                ['sourceNodeId' => 'validate', 'sourcePortKey' => 'valid', 'targetNodeId' => 'charge', 'targetPortKey' => 'authorized'],
+                ['sourceNodeId' => 'charge', 'sourcePortKey' => 'receipt', 'targetNodeId' => 'notify', 'targetPortKey' => 'message'],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private function fixtureCatalog(): array
+    {
+        return [
+            'demo.trigger' => [
+                'type' => 'demo.trigger',
+                'name' => 'Order Received',
+                'category' => 'trigger',
+                'icon' => 'play',
+                'description' => 'Starts the checkout flow.',
+                'inputs' => [],
+                'outputs' => [
+                    ['key' => 'out', 'type' => 'json', 'required' => false, 'label' => 'Order payload', 'multiple' => false],
+                ],
+            ],
+            'demo.validate' => [
+                'type' => 'demo.validate',
+                'name' => 'Validate Order',
+                'category' => 'logic',
+                'icon' => 'check',
+                'description' => 'Validates the order payload.',
+                'inputs' => [
+                    ['key' => 'in', 'type' => 'json', 'required' => true, 'label' => 'Order payload', 'multiple' => false],
+                ],
+                'outputs' => [
+                    ['key' => 'valid', 'type' => 'bool', 'required' => false, 'label' => 'Is valid', 'multiple' => false],
+                ],
+            ],
+            'demo.charge' => [
+                'type' => 'demo.charge',
+                'name' => 'Charge Payment',
+                'category' => 'payment',
+                'icon' => 'send',
+                'description' => 'Charges the customer.',
+                'inputs' => [
+                    ['key' => 'authorized', 'type' => 'bool', 'required' => true, 'label' => 'Authorized', 'multiple' => false],
+                ],
+                'outputs' => [
+                    ['key' => 'receipt', 'type' => 'text', 'required' => false, 'label' => 'Receipt id', 'multiple' => false],
+                ],
+            ],
+            'demo.notify' => [
+                'type' => 'demo.notify',
+                'name' => 'Notify Customer',
+                'category' => 'notification',
+                'icon' => 'bell',
+                'description' => 'Sends a confirmation.',
+                'inputs' => [
+                    ['key' => 'message', 'type' => 'text', 'required' => true, 'label' => 'Message', 'multiple' => false],
+                ],
+                'outputs' => [],
+            ],
+        ];
+    }
+
+    private function matchesFixtureFlow(string $name, string $id): bool
+    {
+        foreach ((array) ($this->fixture['FLOW_DEFS'] ?? []) as $definition) {
+            if (! is_array($definition) || ($definition['id'] ?? null) !== $id) {
+                continue;
+            }
+
+            return $name === $id || $name === (string) ($definition['name'] ?? $id);
+        }
+
+        return $name === $id;
     }
 
     /**
@@ -568,6 +718,7 @@ final class ArrayReadModel implements ReadModel
                 static fn (mixed $value): bool => is_string($value),
             )),
             errorMessage: $errorMessage,
+            cacheHit: (bool) ($step['cache_hit'] ?? false),
         );
     }
 
@@ -585,6 +736,7 @@ final class ArrayReadModel implements ReadModel
             requestedAt: $this->timestampToDateTimeImmutable($approval['requested_at'] ?? null),
             approver: $approval['actor'] ?? null,
             decidedAt: $this->timestampToDateTimeImmutable($approval['decided_at'] ?? null),
+            tokenHash: isset($approval['token_hash']) ? (string) $approval['token_hash'] : null,
         );
     }
 

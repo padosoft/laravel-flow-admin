@@ -10,10 +10,56 @@ use Padosoft\LaravelFlowAdmin\Contracts\Dto\RunDetail;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\RunSummary;
 use Padosoft\LaravelFlowAdmin\Contracts\Dto\Step;
 use Padosoft\LaravelFlowAdmin\ViewModels\RunDetailViewModel;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 final class RunDetailViewModelTest extends TestCase
 {
+    /**
+     * @return array<string, array{0: string, 1: bool, 2: bool}>
+     */
+    public static function actionEligibilityProvider(): array
+    {
+        // [publicStatus, canCancel, canReplay] — cancel only while active,
+        // replay only once terminal (any non-active, non-empty status).
+        return [
+            'running is cancellable, not replayable' => ['running', true, false],
+            'paused is cancellable, not replayable' => ['paused', true, false],
+            'pending is cancellable, not replayable' => ['pending', true, false],
+            'success is replayable, not cancellable' => ['success', false, true],
+            'failed is replayable, not cancellable' => ['failed', false, true],
+            'compensated is replayable, not cancellable' => ['compensated', false, true],
+            'empty status offers neither' => ['', false, false],
+        ];
+    }
+
+    #[DataProvider('actionEligibilityProvider')]
+    public function test_cancel_and_replay_eligibility_follows_run_status(string $status, bool $canCancel, bool $canReplay): void
+    {
+        $vm = $this->viewModelWithStatus($status);
+
+        $this->assertSame($canCancel, $vm->canCancel());
+        $this->assertSame($canReplay, $vm->canReplay());
+    }
+
+    private function viewModelWithStatus(string $status): RunDetailViewModel
+    {
+        $started = new DateTimeImmutable('2026-05-06T10:00:00Z');
+
+        return RunDetailViewModel::fromDto(new RunDetail(
+            summary: new RunSummary(
+                id: 'r', flowName: 'f', flowVersion: 'v',
+                status: $status, actor: 'a', correlationId: 'c',
+                startedAt: $started, finishedAt: null, durationMs: null,
+                stepCount: 0, attemptsTotal: 0,
+            ),
+            steps: [],
+            audit: [],
+            inputPayload: [],
+            outputPayload: [],
+        ));
+    }
+
     public function test_from_dto_composes_summary_steps_audit_and_payloads(): void
     {
         $started = new DateTimeImmutable('2026-05-06T10:00:00Z');

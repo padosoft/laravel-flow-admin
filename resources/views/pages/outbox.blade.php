@@ -27,6 +27,7 @@
                                 <th>Event</th>
                                 <th>Destination</th>
                                 <th class="num">Attempts</th>
+                                <th class="num">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -37,9 +38,21 @@
                                     <td class="mono">{{ $row->eventType }}</td>
                                     <td class="muted">{{ $row->destination }}</td>
                                     <td class="num mono">{{ $row->attempts }}</td>
+                                    <td class="num">
+                                        @if ($row->canRedeliver)
+                                            <button class="btn sm" type="button"
+                                                data-flow-action
+                                                data-testid="outbox-redeliver"
+                                                data-action-url="{{ route('flow-admin.outbox.redeliver', ['id' => $row->id]) }}"
+                                                data-confirm="Redeliver this webhook? It will be queued for another delivery attempt."
+                                                data-busy-label="Requeuing…">Redeliver</button>
+                                        @else
+                                            <span class="muted" data-testid="outbox-no-action">—</span>
+                                        @endif
+                                    </td>
                                 </tr>
                             @empty
-                                <tr><td colspan="5"><div class="empty">No outbox items found.</div></td></tr>
+                                <tr><td colspan="6"><div class="empty">No outbox items found.</div></td></tr>
                             @endforelse
                         </tbody>
                     </table>
@@ -47,4 +60,6 @@
             </div>
         </div>
     </div>
+
+    @include('flow-admin::partials.action-runner')
 @endsection

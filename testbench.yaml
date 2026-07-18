@@ -2,15 +2,62 @@ laravel: '@testbench'
 
 providers:
   - Padosoft\LaravelFlowAdmin\FlowAdminServiceProvider
+  # Registered explicitly so the served E2E app has the AI pack's container
+  # bindings — notably FlowAdvisor, whose constructor takes non-injectable
+  # arrays (analyzers/exposed flows) and therefore CANNOT auto-wire; without
+  # its provider the /advisor/scan endpoint 500s with BindingResolutionException.
+  # A real consumer app gets this via package auto-discovery (the package
+  # declares it in composer extra.laravel.providers); testbench's served app
+  # does not pick up the path-repo sibling's discovery, so list it here.
+  - Padosoft\LaravelFlowAI\LaravelFlowAIServiceProvider
 
 # Env block runs *after* Dotenv via Orchestra\Testbench\Foundation\Bootstrap\
 # LoadEnvironmentVariablesFromArray, so it always wins over the testbench-core
-# bundled .env. We use it for two dev-only overrides:
+# bundled .env. We use it for dev-only overrides:
 #   - FLOW_ADMIN_MIDDLEWARE=web → drop the `auth` middleware so the smoke spec
 #     does not need to seed an authenticated session. Production stays on
 #     `web,auth` because production deployments do not ship testbench.yaml.
 #   - FLOW_ADMIN_ADAPTER=array  → use the deterministic seed-42 fixtures from
 #     Macro 4 onward; until then the value is ignored.
+#   - FLOW_ADMIN_AUTHORIZER=allow → opt into AllowAllAuthorizer (E-PR3) so
+#     Playwright can exercise the Studio editor's save-as-draft flow
+#     end-to-end. Production never sets this — the shipped default stays
+#     deny-by-default (see config/flow-admin.php).
+#   - DB_CONNECTION=sqlite → force the served app's default connection to the
+#     persistent SQLite file, NOT testbench's default `testing`/`:memory:`
+#     connection (empty per request → the save-as-draft write 500'd with "no
+#     such table: flow_definitions" on CI, green locally by env luck). This
+#     block is read by the served app itself, so it applies even though the
+#     `php -S` worker doesn't inherit the serve script's process env.
+#     We deliberately do NOT set DB_DATABASE here: `artisan serve` runs the
+#     `php -S` worker with CWD = the skeleton's public_path(), so a relative
+#     path would resolve against the wrong dir, and an absolute one can't be
+#     written into static YAML. Instead scripts/serve-testbench.mjs migrates
+#     the skeleton's OWN `database_path('database.sqlite')`, which the served
+#     app resolves to by the same `env('DB_DATABASE', database_path(...))`
+#     default — no path plumbing needed.
+#     NOTE: only the `testbench serve` runtime reads this block; the PHPUnit
+#     suite is driven by phpunit.xml (its own `testing`/`:memory:` env), so
+#     this does not touch unit/feature tests.
 env:
   FLOW_ADMIN_MIDDLEWARE: web
   FLOW_ADMIN_ADAPTER: array
+  FLOW_ADMIN_AUTHORIZER: allow
+  DB_CONNECTION: sqlite
+  # E-PR5: the served app reports broadcasting as ENABLED so the live-monitor
+  # E2E can exercise the Echo path (a fake window.Echo injected by the test).
+  # No real broadcaster runs — the flag only drives the monitor page's
+  # data-broadcasting attribute; without an Echo client the page still polls.
+  LARAVEL_FLOW_BROADCASTING_ENABLED: true
+  # E-PR8: swap padosoft/laravel-flow-ai's real (network) LLM client for the
+  # deterministic FakeLlmClient so the "Build with AI" E2E can exercise the
+  # AI-builder happy path with no live model / API key. Dev/E2E only — the
+  # provider refuses this flag in the production environment (same posture as
+  # FLOW_ADMIN_AUTHORIZER=allow). The fake returns a single demo.trigger node,
+  # a type the array adapter registers, so the server-side GraphValidator pass
+  # accepts it.
+  FLOW_ADMIN_FAKE_LLM: true
+  # The Studio ai-build route is `throttle:`-limited; its RateLimiter needs a
+  # working cache store. Force the in-memory array store so the served app
+  # doesn't hit testbench's DB-backed cache (which has no `cache` table).
+  CACHE_STORE: array

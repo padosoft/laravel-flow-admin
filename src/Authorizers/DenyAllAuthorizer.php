@@ -53,4 +53,9 @@ final class DenyAllAuthorizer implements ActionAuthorizer
     {
         return false;
     }
+
+    public function canEditDefinition(string $flowName, ?array $actor): bool
+    {
+        return false;
+    }
 }
