@@ -247,7 +247,7 @@ jobs:
         if: steps.pkg.outputs.pw == 'true' && steps.pkg.outputs.node == 'true'
         id: download-assets
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: flow-admin-built-assets
           # `download-artifact` is a `uses:` step — `defaults.run.working-directory`
