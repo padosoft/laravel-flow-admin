@@ -48,7 +48,11 @@ export default [
       'react/prop-types': 'off',
     },
     settings: {
-      react: { version: 'detect' },
+      // Pin the React version explicitly. eslint-plugin-react's `'detect'`
+      // code path calls the `context.getFilename()` API that ESLint 10
+      // removed, so it throws at rule-load time; an explicit version skips
+      // detection entirely (and is faster).
+      react: { version: '19.2' },
     },
   },
   {
