@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Checkout laravel-flow-admin
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: laravel-flow-admin
 
@@ -44,7 +44,7 @@ jobs:
           tools: composer:v2
 
       - name: Composer cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.composer/cache
           key: composer-${{ matrix.php }}-${{ hashFiles('**/composer.json') }}
@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Frontend (Node 20)
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Detect package manifest
         id: pkg
@@ -101,7 +101,7 @@ jobs:
 
       - name: Setup Node (with npm cache)
         if: steps.pkg.outputs.present == 'true' && steps.pkg.outputs.lockfile == 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
@@ -109,7 +109,7 @@ jobs:
 
       - name: Setup Node (no cache, no lockfile yet)
         if: steps.pkg.outputs.present == 'true' && steps.pkg.outputs.lockfile != 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
 
@@ -167,7 +167,7 @@ jobs:
 
     steps:
       - name: Checkout laravel-flow-admin
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: laravel-flow-admin
 
@@ -206,7 +206,7 @@ jobs:
 
       - name: Setup Node (with npm cache)
         if: steps.pkg.outputs.node == 'true' && steps.pkg.outputs.lockfile == 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
@@ -214,7 +214,7 @@ jobs:
 
       - name: Setup Node (no cache, no lockfile yet)
         if: steps.pkg.outputs.node == 'true' && steps.pkg.outputs.lockfile != 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
 
