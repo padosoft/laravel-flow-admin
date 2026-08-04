@@ -5,6 +5,9 @@
   "type": "module",
   "description": "Frontend bundle (Blade + Vite + Alpine.js + Playwright) for padosoft/laravel-flow-admin.",
   "license": "Apache-2.0",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

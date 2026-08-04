@@ -121,7 +121,7 @@
 | Laravel | `^13.0` |
 | [`padosoft/laravel-flow`](https://github.com/padosoft/laravel-flow) | `^2.0` |
 | [`padosoft/laravel-flow-ai`](https://github.com/padosoft/laravel-flow-ai) (optional — unlocks the AI features) | `^1.0` |
-| Node.js (only if you want to rebuild assets) | `>=20` |
+| Node.js (only if you want to rebuild assets) | `^20.19.0 || >=22.12.0` |
 | Database | any Laravel-supported driver (or `array` adapter for demos) |
 
 > 💡 You **do not** need Node.js to use this package. Pre-built assets ship inside the package and are publishable via `vendor:publish`.

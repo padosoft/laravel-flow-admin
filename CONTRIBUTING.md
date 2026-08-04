@@ -2,7 +2,7 @@
 
 ## Requirements
 - PHP 8.3+
-- Node 20+
+- Node `^20.19.0 || >=22.12.0`
 - Composer
 - npm
 
