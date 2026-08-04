@@ -15,7 +15,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.60.0",
-    "@vitejs/plugin-react": "^6.0.3",
+    "@vitejs/plugin-react": "^6.0.5",
     "alpinejs": "^3.14.3",
     "eslint": "^10.3.0",
     "eslint-plugin-react": "^7.37.5",
