@@ -5,6 +5,12 @@
 
 ---
 
+## 2026-08-04 — Toolchain bumps must promote stricter transitive engine requirements to project metadata
+
+Playwright 1.62.1 raises its Node requirement to `>=20`, while Vite 8.2.0 requires `^20.19.0 || >=22.12.0`. Leaving the root package without an `engines.node` field would let contributors attempt installs on unsupported Node releases and receive failures from transitive packages instead of an actionable project-level diagnostic.
+
+**How to apply:** after every frontend toolchain bump, compare the updated lockfile's engine constraints, choose the strictest effective requirement, and synchronize `package.json`, README, CONTRIBUTING, and CI. A Dependabot title may describe the resolved lockfile version (for example 1.61.1 → 1.62.1) while the manifest range changes from an older floor; make both facts explicit in the PR description instead of treating either as the whole upgrade story.
+
 ## 2026-07-18 — The E2E single-browser flake was a SILENT SEGFAULT of the experimental worker server, not a stall — and `artisan serve` never restarts a crashed server
 
 The long-standing "a different single browser flakes each run" CI symptom was mis-diagnosed for months as a single-threaded `testbench serve` **stall** (the standing advice was "re-run the shard"). Reading an actual failing shard log end-to-end told a different story:
