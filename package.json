@@ -19,7 +19,7 @@
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
     "@vitejs/plugin-react": "^6.0.5",
-    "alpinejs": "^3.14.3",
+    "alpinejs": "^3.16.1",
     "eslint": "^10.8.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
