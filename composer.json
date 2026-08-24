@@ -34,6 +34,8 @@
         "orchestra/testbench": "^11.0",
         "phpunit/phpunit": "^11.0",
         "laravel/pint": "^1.18",
+        "phpstan/phpstan": "^2.0",
+        "larastan/larastan": "^3.0",
         "padosoft/laravel-flow-ai": "^1.0"
     },
     "autoload": {
