@@ -680,7 +680,8 @@ final readonly class EloquentReadModel implements ReadModel
 
         return str_contains(mb_strtolower($run->id), $needle)
             || str_contains(mb_strtolower($run->definitionName), $needle)
-            || str_contains(mb_strtolower((string) $run->correlationId), $needle);
+            || str_contains(mb_strtolower((string) $run->correlationId), $needle)
+            || str_contains(mb_strtolower((string) $run->subject), $needle);
     }
 
     private function approvalMatchesSearch(DashboardApprovalSummary $approval, string $search): bool
@@ -704,13 +705,18 @@ final readonly class EloquentReadModel implements ReadModel
     {
         [$name, $version] = $this->splitFlowDefinition($run->definitionName);
         $correlationId = (string) $run->correlationId;
+        // Core >= 2.2 records WHO the run acts for (flow_runs.subject, e.g. an
+        // agent-initiated run acting for "user:42"). Prefer that real principal;
+        // the pre-2.2 correlation-id stand-in stays as the fallback so existing
+        // rows keep rendering exactly as before.
+        $subject = (string) $run->subject;
 
         return new RunSummary(
             id: $run->id,
             flowName: $name,
             flowVersion: $version,
             status: $this->toPublicStatus($run->status),
-            actor: $correlationId !== '' ? $correlationId : 'system',
+            actor: $subject !== '' ? $subject : ($correlationId !== '' ? $correlationId : 'system'),
             correlationId: $correlationId,
             startedAt: $run->startedAt ?? new DateTimeImmutable,
             finishedAt: $run->finishedAt,
