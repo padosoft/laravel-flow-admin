@@ -87,7 +87,7 @@
 - 🛡️ **Deny-by-default authorizer** — every mutation goes through your `ActionAuthorizer`. No accidents.
 - 🔁 **Auto-refreshing pages** — configurable polling (`/flow/api/live`).
 - 🧱 **Adapter pattern** — `eloquent` for prod, `array` for demos / E2E (deterministic seed-42 fixtures).
-- 🧪 **Battle-tested** — 246 PHPUnit tests, 33 Playwright scenarios (99 runs across Chromium / Firefox / WebKit — 93 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario).
+- 🧪 **Battle-tested** — 246 PHPUnit tests, 33 Playwright scenarios (99 runs across Chromium / Firefox / WebKit — 93 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario). No test is skipped to hide a failure: the run-monitor navigation race was fixed by waiting for the navigation, not by widening its timeout.
 - 📦 **Zero-coupling** — built on a public `Contracts\*` surface; engine internals stay `@internal`.
 
 ---
