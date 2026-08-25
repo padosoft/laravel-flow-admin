@@ -50,6 +50,19 @@ env:
   # No real broadcaster runs — the flag only drives the monitor page's
   # data-broadcasting attribute; without an Echo client the page still polls.
   LARAVEL_FLOW_BROADCASTING_ENABLED: true
+  # The layout polls /flow/api/live on EVERY page. In a browser it is a
+  # once-every-4s heartbeat; across three Playwright shards it is a constant
+  # stream of concurrent requests into a dev server, and it was the dominant
+  # load behind the `net::ERR_EMPTY_RESPONSE` flake (see serve-testbench.mjs).
+  #
+  # No test needs it to fire: the only spec that touches the heartbeat is
+  # macro8-runtime's live-toggle, which asserts the toast text the toggle
+  # emits, not that a poll happened. So push the interval past any run's
+  # lifetime — the toggle still works, the timer just never elapses.
+  #
+  # The run-monitor's own poll is untouched: two specs assert the polling
+  # fallback renders node states, and that is a real behaviour under test.
+  FLOW_ADMIN_POLLING_MS: 3600000
   # E-PR8: swap padosoft/laravel-flow-ai's real (network) LLM client for the
   # deterministic FakeLlmClient so the "Build with AI" E2E can exercise the
   # AI-builder happy path with no live model / API key. Dev/E2E only — the
