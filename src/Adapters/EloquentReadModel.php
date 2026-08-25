@@ -771,6 +771,9 @@ final readonly class EloquentReadModel implements ReadModel
             dependsOn: [],
             errorMessage: $step->errorMessage,
             cacheHit: $step->cacheHit,
+            // The engine records the class beside the message; without it a
+            // policy stop and a crash are the same red badge.
+            errorClass: $step->errorClass,
         );
     }
 

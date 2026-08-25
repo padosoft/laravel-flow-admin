@@ -907,6 +907,35 @@ button { background: transparent; border: 0; padding: 0; cursor: pointer; }
 .step-row2 { display: flex; align-items: center; gap: 12px; font-size: 11.5px; color: var(--text-tertiary); }
 .step-row2 .mono { color: var(--text-secondary); }
 
+/* Why a step stopped. `policy` is amber, not red: a rule doing its job is not
+   an outage, and colouring it red trains operators to ignore red. */
+.halt-reason {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.halt-reason.policy {
+  color: var(--status-paused);
+  background: var(--status-paused-bg);
+  border-color: var(--status-paused-bg);
+}
+.halt-reason.error {
+  color: var(--status-failed);
+  background: var(--status-failed-bg);
+  border-color: var(--status-failed-bg);
+}
+.step-error {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
 /* Gantt-style bar */
 .step-gantt {
   margin-top: 6px;

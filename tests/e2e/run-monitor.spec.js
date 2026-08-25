@@ -24,8 +24,16 @@ window.__fireFlow = (channel, event, payload) => {
 
 async function gotoFirstRunMonitor(page) {
   await page.goto('/flow/runs');
-  await page.locator('table tbody tr').first().click();
-  await expect(page).toHaveURL(/\/flow\/runs\/[^/]+$/);
+  // The row navigates with an inline `onclick="window.location=..."`, so the
+  // click and the navigation are two separate events. Asserting the URL *after*
+  // an awaited click races them: WebKit occasionally drops a `window.location`
+  // assignment issued while the document is still settling, and the assertion
+  // then times out on the list URL. Waiting for the navigation concurrently
+  // with the click removes the race instead of widening the timeout.
+  await Promise.all([
+    page.waitForURL(/\/flow\/runs\/[^/]+$/),
+    page.locator('table tbody tr').first().click(),
+  ]);
   await page.getByTestId('run-monitor-link').click();
   await expect(page.getByTestId('flow-monitor-root')).toBeVisible();
   await expect(page.getByTestId('flow-monitor')).toBeVisible();
