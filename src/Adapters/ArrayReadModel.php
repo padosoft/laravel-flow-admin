@@ -706,6 +706,11 @@ final class ArrayReadModel implements ReadModel
             $errorMessage = null;
         }
 
+        $errorClass = $step['error']['class'] ?? null;
+        if (! is_string($errorClass)) {
+            $errorClass = null;
+        }
+
         return new Step(
             name: (string) ($step['name'] ?? 'step'),
             status: (string) ($step['status'] ?? 'pending'),
@@ -719,6 +724,7 @@ final class ArrayReadModel implements ReadModel
             )),
             errorMessage: $errorMessage,
             cacheHit: (bool) ($step['cache_hit'] ?? false),
+            errorClass: $errorClass,
         );
     }
 
