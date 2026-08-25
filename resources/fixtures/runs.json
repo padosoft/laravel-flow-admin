@@ -5764,8 +5764,8 @@
           },
           "output": null,
           "error": {
-            "class": "Padosoft\\\\Flow\\\\Exceptions\\\\StepExecutionException",
-            "message": "Rate limit exceeded for provider:stripe"
+            "class": "Padosoft\\\\LaravelFlowAI\\\\Identity\\\\Exceptions\\\\GrantRevokedException",
+            "message": "Delegation grant dgr_01J9DEMO0001 was revoked; the agent loop halted before the next tool call."
           }
         },
         {
