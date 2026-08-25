@@ -87,7 +87,7 @@
 - 🛡️ **Deny-by-default authorizer** — every mutation goes through your `ActionAuthorizer`. No accidents.
 - 🔁 **Auto-refreshing pages** — configurable polling (`/flow/api/live`).
 - 🧱 **Adapter pattern** — `eloquent` for prod, `array` for demos / E2E (deterministic seed-42 fixtures).
-- 🧪 **Battle-tested** — 246 PHPUnit tests, 33 Playwright scenarios (99 runs across Chromium / Firefox / WebKit — 93 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario). No test is skipped to hide a failure. The run-monitor spec waits for its navigation rather than asserting the URL after the click — which also surfaces the real error when the e2e server's experimental forked worker dies mid-request (`net::ERR_EMPTY_RESPONSE`), instead of reporting it as a URL mismatch. See `scripts/serve-testbench.mjs` for that server's known limits.
+- 🧪 **Battle-tested** — 246 PHPUnit tests, 33 Playwright scenarios (99 runs across Chromium / Firefox / WebKit — 93 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario). No test is skipped to hide a failure, and the e2e server no longer runs PHP's **experimental forking** built-in server: a forked worker segfaulting mid-request returned an empty response the browser reported as `net::ERR_EMPTY_RESPONSE`, and no retry can recover a response that was never written. The background `/flow/api/live` heartbeat — which no test needs — is switched off for e2e instead, leaving a single worker enough to serialise what remains. See `scripts/serve-testbench.mjs`.
 - 📦 **Zero-coupling** — built on a public `Contracts\*` surface; engine internals stay `@internal`.
 
 ---

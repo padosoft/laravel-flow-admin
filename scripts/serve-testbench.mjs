@@ -113,18 +113,32 @@ const env = {
   DB_CONNECTION: 'sqlite',
   DB_DATABASE: e2eDatabasePath,
   // `testbench serve` → `artisan serve` runs a SINGLE-threaded `php -S` worker
-  // by default, so one slow request (e.g. the ~500ms AI advisor scan) blocks
-  // every concurrent request — asset loads, the `/flow/api/live` poll — and can
-  // stall a browser shard. PHP_CLI_SERVER_WORKERS pre-forks N workers so the
-  // built-in server handles requests concurrently. POSIX only (Linux/macOS CI);
-  // PHP ignores it on Windows, so local Windows runs are single-worker.
-  // Overridable; default 4. TWO things are required for this to be SAFE:
-  //   (1) `--no-reload` on the serve command below, or ServeCommand silently
-  //       falls back to a single worker (warning only); and
-  //   (2) the crash SUPERVISOR below — this worker mode is EXPERIMENTAL and
-  //       segfaults silently under load, and a crash otherwise leaves the port
-  //       dead forever (artisan serve never restarts a crashed server).
-  PHP_CLI_SERVER_WORKERS: process.env.PHP_CLI_SERVER_WORKERS ?? '4',
+  // by default, so one slow request blocks every concurrent request. The
+  // previous answer was PHP_CLI_SERVER_WORKERS=4, which pre-forks N workers —
+  // but that is PHP's EXPERIMENTAL forking built-in server, and it does not
+  // merely risk a crash, it takes one: a forked worker segfaults under load and
+  // the request it was serving returns EMPTY. The browser reports
+  // `net::ERR_EMPTY_RESPONSE`, Playwright reports whatever assertion was
+  // waiting, and the failure moves between browsers run to run. Nothing
+  // downstream can recover a response that was never written, so the
+  // supervisor below (which restarts a dead MASTER) cannot help.
+  //
+  // So: remove the concurrency instead of surviving it. The dominant load was
+  // the layout's 4-second `/flow/api/live` heartbeat firing on every page of
+  // every shard, and no test needs it — testbench.yaml now pushes
+  // FLOW_ADMIN_POLLING_MS past any run's lifetime. What remains is one
+  // navigation at a time plus the run-monitor's own 2.5s poll during two
+  // specs, which a single worker serialises in milliseconds.
+  //
+  // That is the trade: a single worker BLOCKS (bounded, deterministic, and
+  // invisible at these durations) where the forking worker CRASHED (unbounded,
+  // nondeterministic, and fatal to the request). If a slow endpoint ever does
+  // stall a shard, the answer is a real server — FrankenPHP or php-fpm — not
+  // the experimental code path.
+  //
+  // Still overridable, so a bisect can put the old behaviour back in one env
+  // var: `PHP_CLI_SERVER_WORKERS=4 npm run e2e`.
+  PHP_CLI_SERVER_WORKERS: process.env.PHP_CLI_SERVER_WORKERS ?? '1',
 };
 
 mkdirSync(dirname(e2eDatabasePath), { recursive: true });
@@ -182,28 +196,34 @@ if (wal.status !== 0) {
   process.exit(wal.status ?? 1);
 }
 
-// `--no-reload` is REQUIRED for PHP_CLI_SERVER_WORKERS to take effect: Laravel's
-// ServeCommand::initialize() refuses to honour the worker count (falls back to a
-// single worker with only a warning) unless `--no-reload` is passed and it isn't
-// under Sail. The dev-server's restart-on-.env-change is irrelevant for a
-// short-lived CI/E2E server, so disabling it is free here.
+// `--no-reload` is kept for two reasons. It is what makes PHP_CLI_SERVER_WORKERS
+// take effect at all (ServeCommand::initialize() silently falls back to a single
+// worker, warning only, unless it is passed and we are not under Sail), so an
+// override back to the forked mode still behaves as advertised; and the
+// dev-server's restart-on-.env-change is meaningless for a short-lived CI
+// server, so disabling it costs nothing either way.
 //
-// SUPERVISOR (crash resilience) — the definitive fix for the residual E2E
-// flake. `PHP_CLI_SERVER_WORKERS` runs PHP's EXPERIMENTAL forking built-in
-// server, which segfaults SILENTLY under the E2E load (constant `/flow/api/live`
-// polling + the run-monitor 2.5s poll + Firefox aborting in-flight requests as
-// it navigates between tests). When that `php -S` process dies, `artisan serve`
-// does NOT restart it — ServeCommand's loop only restarts on a `.env` change, so
-// on a crash it just exits and the port stays unbound. Every later request then
-// gets `NS_ERROR_CONNECTION_REFUSED`: the first test to hit the dead server eats
-// its full 30s timeout, then the whole browser shard cascades (this was the
-// recurring "a different single browser flakes each run" CI symptom — verified
-// from a Firefox shard log: fast 0.04ms responses until the server went silent,
-// then 26s of nothing, then CONNECTION_REFUSED on every retry, with no PHP error
-// = a silent segfault). We supervise the serve process and respawn it on any
-// UNEXPECTED exit, so a crash becomes a sub-second port-rebind blip that
-// Playwright's own per-test retries absorb instead of a fatal shard-wide
-// cascade. Migration + WAL ran once above against a persistent DB file and the
+// SUPERVISOR (crash resilience). This was written as "the definitive fix for
+// the residual E2E flake" while the forked worker mode was the default, and it
+// is worth being precise about what it can and cannot do:
+//
+//   - It CAN recover a dead MASTER. When the `php -S` process dies, `artisan
+//     serve` does not restart it (ServeCommand's loop only restarts on a `.env`
+//     change), so the port stays unbound and every later request gets
+//     `NS_ERROR_CONNECTION_REFUSED` — the first test eats its 30s timeout and
+//     the shard cascades. Respawning turns that into a sub-second port-rebind
+//     blip Playwright's retries absorb.
+//   - It CANNOT recover a dead WORKER. A forked worker that segfaults mid-
+//     request leaves that connection closed with nothing written, which reaches
+//     the browser as `net::ERR_EMPTY_RESPONSE`. The master is still alive, so
+//     there is nothing to respawn and nothing to retry — the response was never
+//     going to exist. That is the failure this supervisor was credited with
+//     fixing and did not, and it is why the worker default is now 1 (see the
+//     env block above).
+//
+// The supervisor stays: a master can still die for reasons that have nothing to
+// do with worker mode, and anyone overriding PHP_CLI_SERVER_WORKERS back to 4
+// wants it. Migration + WAL ran once above against a persistent DB file and the
 // demo ReadModel is stateless, so a respawn preserves all test state.
 let shuttingDown = false;
 let restarts = 0;
