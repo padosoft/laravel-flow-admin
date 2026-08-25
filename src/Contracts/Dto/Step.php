@@ -22,7 +22,7 @@ final readonly class Step
      * @param  int  $attempts  How many times this step was tried (1 = no retries).
      * @param  list<string>  $dependsOn  Step names that must succeed before this one runs.
      * @param  ?string  $errorMessage  Last error message, sanitised at the source (no stack trace, no secrets).
-     * @param  ?string  $errorClass  Exception class the engine stamped alongside the message. It is the discriminator a message cannot be: a step stopped because a delegation grant was revoked and a step that crashed both read as `failed`, and only the class says which. {@see \Padosoft\LaravelFlowAdmin\Support\HaltReason}.
+     * @param  ?string  $errorClass  Exception class the engine stamped alongside the message. It is the discriminator a message cannot be: a step stopped because a delegation grant was revoked and a step that crashed both read as `failed`, and only the class says which. `Support\HaltReason` turns it into a label and a kind.
      * @param  bool  $cacheHit  True when this step's result was served from the node cache (`#[Cacheable]`) rather than re-executed — rendered as a badge on an otherwise-succeeded step, not a distinct status.
      */
     public function __construct(

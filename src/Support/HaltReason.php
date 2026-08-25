@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelFlowAdmin\Support;
 
+use Padosoft\LaravelFlow\Dashboard\StepSummary;
+
 /**
  * Turns the exception class the engine stamped on a step into "why it stopped".
  *
@@ -16,7 +18,7 @@ namespace Padosoft\LaravelFlowAdmin\Support;
  *
  * The message cannot make that distinction: it is redacted at the source and
  * says nothing structural. The class can, and the engine already records it —
- * {@see \Padosoft\LaravelFlow\Dashboard\StepSummary::$errorClass}.
+ * {@see StepSummary::$errorClass}.
  *
  * Two `kind`s, deliberately, not five:
  *
