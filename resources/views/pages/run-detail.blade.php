@@ -52,7 +52,19 @@
                                     <div class="step-row2">
                                         <span class="mono">{{ $step->durationLabel }}</span>
                                         <span>Attempts: {{ $step->attempts }}</span>
+                                        @if ($step->haltLabel !== null)
+                                            {{-- A rule that stopped this on purpose is not a bug to chase:
+                                                 the two are one `failed` status and only the class tells
+                                                 them apart. --}}
+                                            <span class="halt-reason {{ $step->haltKind }}"
+                                                data-testid="step-halt-{{ $step->name }}"
+                                                data-halt-kind="{{ $step->haltKind }}"
+                                                title="{{ $step->errorClass }}">{{ $step->haltLabel }}</span>
+                                        @endif
                                     </div>
+                                    @if ($step->errorMessage !== null && $step->errorMessage !== '')
+                                        <p class="step-error" data-testid="step-error-{{ $step->name }}">{{ $step->errorMessage }}</p>
+                                    @endif
                                 </div>
                             </div>
                         @empty

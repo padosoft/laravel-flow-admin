@@ -218,6 +218,31 @@ final class EloquentReadModelTest extends TestCase
         $this->assertSame('validation', $detail->audit[0]->payload['reason']);
     }
 
+    public function test_actor_prefers_the_run_subject_over_the_correlation_id_stand_in(): void
+    {
+        // Core >= 2.2 records WHO the run acts for (flow_runs.subject) — e.g. an
+        // agent-initiated run acting for "user:42". The actor column must show
+        // that real principal; the correlation-id stand-in remains the fallback.
+        $withSubject = $this->seedRun([
+            'id' => 'run-subject',
+            'status' => FlowRun::STATUS_SUCCEEDED,
+            'definition_name' => 'checkout:2.1',
+            'correlation_id' => 'corr-123',
+            'subject' => 'user:42',
+            'started_at' => $this->tsMinutesAgo(5),
+        ]);
+
+        $detail = $this->makeModel()->findRun($withSubject);
+        $this->assertNotNull($detail);
+        $this->assertSame('user:42', $detail->summary->actor);
+        $this->assertSame('corr-123', $detail->summary->correlationId);
+
+        // Free-text search finds the run by its subject too.
+        $page = $this->makeModel()->listRuns(null, null, 'user:42');
+        $this->assertCount(1, $page->items);
+        $this->assertSame('run-subject', $page->items[0]->id);
+    }
+
     public function test_approvals_filter_query_and_pending_sorting(): void
     {
         $runId = $this->seedRun(['id' => 'run-approvals']);
@@ -786,6 +811,7 @@ final class EloquentReadModelTest extends TestCase
             'compensated' => $attributes['compensated'] ?? false,
             'compensation_status' => $attributes['compensation_status'] ?? null,
             'correlation_id' => $attributes['correlation_id'] ?? null,
+            'subject' => $attributes['subject'] ?? null,
             'idempotency_key' => $attributes['idempotency_key'] ?? null,
             'started_at' => $this->asTimestamp($startedAt),
             'finished_at' => $this->asTimestamp($attributes['finished_at'] ?? null),
