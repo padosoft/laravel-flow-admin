@@ -72,6 +72,7 @@
 
 - 📊 **Overview dashboard** — KPI tiles, sparklines, recent runs, queue health, error rate.
 - 🏃 **Runs index & detail** — filterable list, full timeline (timeline / Gantt / DAG), payload diff, plus live **Cancel** (active runs → `Flow::cancel()`) and **Replay** (terminal, pinned graph runs → `Flow::replay()` as a new linked run) actions, each behind your `ActionAuthorizer`.
+- 🛑 **Why a step stopped, not just that it did** — `failed` covers two unrelated events: a rule the operator configured stopped the step on purpose, and something broke. The timeline now reads the exception class the engine already records and labels each halt — *Delegation revoked*, *Tool not allowed*, *Budget exhausted*, *Blocked by policy* in amber (a rule doing its job is not an outage), anything else in red with its class name — and prints the sanitised error message underneath. Matched on the class **basename**, so subclassing an exception, or the AI package moving it between namespaces, never silently reclassifies a policy stop as a crash.
 - ✅ **Approvals inbox** — pending decisions with one-click **Approve / Reject**, decided by the approval's token **hash** (`Flow::resumeByHash()` / `rejectByHash()`) so the dashboard never holds a plaintext token — through your own authorizer.
 - 📤 **Webhook outbox** — delivery state, one-click **Redeliver** of a FAILED delivery (`Flow::redeliverWebhook()` requeues it to pending), inspect headers/payloads.
 - 📋 **Flow definitions** — registered workflows, version, last activity at a glance.
