@@ -72,6 +72,7 @@
 
 - 📊 **Overview dashboard** — KPI tiles, sparklines, recent runs, queue health, error rate.
 - 🏃 **Runs index & detail** — filterable list, full timeline (timeline / Gantt / DAG), payload diff, plus live **Cancel** (active runs → `Flow::cancel()`) and **Replay** (terminal, pinned graph runs → `Flow::replay()` as a new linked run) actions, each behind your `ActionAuthorizer`.
+- 🛑 **Why a step stopped, not just that it did** — `failed` covers two unrelated events: a rule the operator configured stopped the step on purpose, and something broke. The timeline now reads the exception class the engine already records and labels each halt — *Delegation revoked*, *Tool not allowed*, *Budget exhausted*, *Blocked by policy* in amber (a rule doing its job is not an outage), anything else in red with its class name — and prints the sanitised error message underneath. Matched on the class **basename**, so subclassing an exception, or the AI package moving it between namespaces, never silently reclassifies a policy stop as a crash.
 - ✅ **Approvals inbox** — pending decisions with one-click **Approve / Reject**, decided by the approval's token **hash** (`Flow::resumeByHash()` / `rejectByHash()`) so the dashboard never holds a plaintext token — through your own authorizer.
 - 📤 **Webhook outbox** — delivery state, one-click **Redeliver** of a FAILED delivery (`Flow::redeliverWebhook()` requeues it to pending), inspect headers/payloads.
 - 📋 **Flow definitions** — registered workflows, version, last activity at a glance.
@@ -86,7 +87,7 @@
 - 🛡️ **Deny-by-default authorizer** — every mutation goes through your `ActionAuthorizer`. No accidents.
 - 🔁 **Auto-refreshing pages** — configurable polling (`/flow/api/live`).
 - 🧱 **Adapter pattern** — `eloquent` for prod, `array` for demos / E2E (deterministic seed-42 fixtures).
-- 🧪 **Battle-tested** — 230 PHPUnit tests, 33 Playwright scenarios (99 runs across Chromium / Firefox / WebKit — 93 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario).
+- 🧪 **Battle-tested** — 246 PHPUnit tests, 33 Playwright scenarios (99 runs across Chromium / Firefox / WebKit — 93 pass, 6 skipped: 3 visual-gated + 1 WebKit drag-and-drop limitation + 2 cross-browser click/drag limitations on one node-deletion scenario). No test is skipped to hide a failure. The run-monitor spec waits for its navigation rather than asserting the URL after the click — which also surfaces the real error when the e2e server's experimental forked worker dies mid-request (`net::ERR_EMPTY_RESPONSE`), instead of reporting it as a URL mismatch. See `scripts/serve-testbench.mjs` for that server's known limits.
 - 📦 **Zero-coupling** — built on a public `Contracts\*` surface; engine internals stay `@internal`.
 
 ---
