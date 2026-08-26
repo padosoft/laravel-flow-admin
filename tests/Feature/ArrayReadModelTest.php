@@ -113,7 +113,7 @@ final class ArrayReadModelTest extends TestCase
         $catalog = (new ArrayReadModel)->catalog();
 
         $this->assertSame(
-            ['demo.trigger', 'demo.validate', 'demo.charge', 'demo.notify'],
+            ['demo.trigger', 'demo.validate', 'demo.charge', 'demo.notify', 'demo.summarise', 'demo.run_command'],
             array_keys($catalog),
         );
     }

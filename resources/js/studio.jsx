@@ -15,6 +15,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import '../css/studio.css';
+import { computeTaint, taintMessage, taintViolations } from './taint';
 
 // Mirrors core's Padosoft\LaravelFlow\Node\PortType (6 cases: text, int,
 // float, bool, json, any) — one distinguishable color per wire type so a
@@ -195,7 +196,24 @@ function wireIsValid(sourcePort, targetPort, fanInOk) {
   return typeOk && fanInOk;
 }
 
-function wireVisuals(valid, sourcePortType) {
+/**
+ * Amber, not red. A taint violation and a type mismatch are both "the
+ * server will reject this", but they are not the same problem and the fix
+ * is in a different place: a red wire means these two ports cannot connect,
+ * an amber one means they connect fine and the DATA arriving is the issue,
+ * usually several hops upstream. Painting them identically would send the
+ * author to the wrong end of the graph.
+ */
+const TAINT_COLOR = '#f59e0b';
+
+function wireVisuals(valid, sourcePortType, tainted = false) {
+  if (tainted) {
+    return {
+      style: { stroke: TAINT_COLOR, strokeWidth: 2, strokeDasharray: '6 3' },
+      markerEnd: { type: MarkerType.ArrowClosed, color: TAINT_COLOR },
+    };
+  }
+
   const color = valid ? (PORT_TYPE_COLORS[sourcePortType] ?? FALLBACK_COLOR) : '#ef4444';
 
   return {
@@ -218,6 +236,15 @@ function recomputeEdgeValidity(edges, nodes, catalog) {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const occupiedInputs = new Set();
 
+  // Taint is a property of the whole graph, not of one wire: `llm.result →
+  // format.in` is perfectly fine on its own, and the violation surfaces
+  // three hops later where `format.out` reaches a `requires_trusted` port.
+  // So it is computed once over every edge here rather than per-wire in
+  // onConnect — which is also why onConnect now routes through this
+  // function instead of validating its own edge in isolation. Adding a
+  // wire can create a violation somewhere the author is not looking.
+  const violations = taintViolations(nodes, edges, catalog, computeTaint(nodes, edges, catalog));
+
   return edges.map((edge) => {
     const sourceNode = nodeById.get(edge.source);
     const targetNode = nodeById.get(edge.target);
@@ -230,9 +257,17 @@ function recomputeEdgeValidity(edges, nodes, catalog) {
       occupiedInputs.add(inputKey);
     }
 
-    const valid = wireIsValid(sourcePort, targetPort, fanInOk);
+    const structurallyValid = wireIsValid(sourcePort, targetPort, fanInOk);
+    const taint = violations.get(edge.id) ?? null;
 
-    return { ...edge, data: { ...edge.data, valid }, ...wireVisuals(valid, sourcePort?.type) };
+    // A tainted wire is `valid: false` too, because GraphValidator will
+    // refuse it on save — letting Save stay enabled just moves the same
+    // rejection to a 422 the author has to correlate back to the canvas.
+    return {
+      ...edge,
+      data: { ...edge.data, valid: structurallyValid && !taint, taint },
+      ...wireVisuals(structurallyValid, sourcePort?.type, Boolean(taint)),
+    };
   });
 }
 
@@ -545,7 +580,17 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl, aiB
     };
   }, [editGraphUrl, catalogUrl]);
 
-  const hasInvalidWire = useMemo(() => state.edges.some((edge) => edge.data?.valid === false), [state.edges]);
+  const hasInvalidWire = useMemo(
+    () => state.edges.some((edge) => edge.data?.valid === false && !edge.data?.taint),
+    [state.edges],
+  );
+  // Kept separate from hasInvalidWire so the two get their own message.
+  // "Fix the invalid connection (shown in red)" is actively unhelpful for a
+  // taint violation: the connection is fine, and the wire is not red.
+  const taintWarnings = useMemo(
+    () => state.edges.map((edge) => edge.data?.taint).filter(Boolean).map(taintMessage),
+    [state.edges],
+  );
   const hasConfigError = useMemo(
     () =>
       state.nodes.some((node) =>
@@ -555,27 +600,25 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl, aiB
       ),
     [state.nodes],
   );
-  const canSave = (state.status === 'ready' || state.status === 'new') && !hasInvalidWire && !hasConfigError;
+  const canSave = (state.status === 'ready' || state.status === 'new') && !hasInvalidWire && taintWarnings.length === 0 && !hasConfigError;
 
   const onConnect = useCallback(
     (params) => {
       dryRunReqRef.current += 1;
       setDryRun(null); // a new edge changes the execution plan — drop any stale one
       setState((current) => {
-        const sourceNode = current.nodes.find((n) => n.id === params.source);
-        const targetNode = current.nodes.find((n) => n.id === params.target);
-        const sourcePort = findPort(current.catalog[sourceNode?.data.nodeType], 'outputs', params.sourceHandle);
-        const targetPort = findPort(current.catalog[targetNode?.data.nodeType], 'inputs', params.targetHandle);
-        const fanInOk = Boolean(targetPort?.multiple) || !current.edges.some((e) => e.target === params.target && e.targetHandle === params.targetHandle);
-        const valid = wireIsValid(sourcePort, targetPort, fanInOk);
+        // A full recompute, not a per-edge check. Type and fan-in validity
+        // are local to the new wire, but taint is not: connecting an LLM
+        // upstream of a chain can turn a wire the author drew ten minutes
+        // ago into a violation. Validating only `params` would leave that
+        // one green and let Save through to a 422.
+        const edges = recomputeEdgeValidity(
+          addEdge({ ...params, data: {} }, current.edges),
+          current.nodes,
+          current.catalog,
+        );
 
-        const newEdge = {
-          ...params,
-          data: { valid },
-          ...wireVisuals(valid, sourcePort?.type),
-        };
-
-        return { ...current, edges: addEdge(newEdge, current.edges) };
+        return { ...current, edges };
       });
     },
     [],
@@ -867,6 +910,16 @@ function StudioEditorCanvas({ editGraphUrl, catalogUrl, draftUrl, dryRunUrl, aiB
           {hasInvalidWire && (
             <span className="field-error" data-testid="studio-invalid-wire-warning">
               Fix the invalid connection (shown in red) before saving.
+            </span>
+          )}
+          {taintWarnings.length > 0 && (
+            <span className="field-error" data-testid="studio-taint-warning">
+              {/* The full path, not just the sink. The fix is almost never
+                  where the amber wire lands — it is a sanitizer somewhere
+                  along the route, or a wire that should not exist. */}
+              {taintWarnings.map((message) => (
+                <span key={message} style={{ display: 'block' }}>{message}</span>
+              ))}
             </span>
           )}
           {saveStatus.kind === 'success' && (
