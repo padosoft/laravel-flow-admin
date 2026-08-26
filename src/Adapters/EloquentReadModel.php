@@ -510,7 +510,7 @@ final readonly class EloquentReadModel implements ReadModel
     }
 
     /**
-     * @return array{type: string, name: string, category: string, icon: ?string, description: ?string, inputs: list<array{key: string, type: string, required: bool, label: string, multiple: bool}>, outputs: list<array{key: string, type: string, required: bool, label: string, multiple: bool}>}
+     * @return array{type: string, name: string, category: string, icon: ?string, description: ?string, inputs: list<array{key: string, type: string, required: bool, label: string, multiple: bool, provenance: string, requires_trusted: bool}>, outputs: list<array{key: string, type: string, required: bool, label: string, multiple: bool, provenance: string, requires_trusted: bool}>}
      */
     private function nodeDefinitionToArray(NodeDefinition $definition): array
     {

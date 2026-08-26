@@ -21,6 +21,8 @@ use Padosoft\LaravelFlowAdmin\Contracts\ActionAuthorizer;
 use Padosoft\LaravelFlowAdmin\Contracts\ReadModel;
 use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoChargeNode;
 use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoNotifyNode;
+use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoRunCommandNode;
+use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoSummariseNode;
 use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoTriggerNode;
 use Padosoft\LaravelFlowAdmin\Fixtures\DemoNodes\DemoValidateNode;
 use Padosoft\LaravelFlowAdmin\Http\Controllers\Assets\AdminCssController;
@@ -191,6 +193,10 @@ class FlowAdminServiceProvider extends ServiceProvider
             'demo.validate' => DemoValidateNode::class,
             'demo.charge' => DemoChargeNode::class,
             'demo.notify' => DemoNotifyNode::class,
+            // A taint source and a taint sink, so the Studio's provenance
+            // rendering has something real to render in demo mode.
+            'demo.summarise' => DemoSummariseNode::class,
+            'demo.run_command' => DemoRunCommandNode::class,
         ];
 
         foreach ($handlers as $type => $handlerClass) {

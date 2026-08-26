@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **Provenance / taint warnings in the Studio canvas.** Core's `GraphValidator` (laravel-flow 2.4) already refuses to publish a graph in which untrusted data reaches a port declaring `requires_trusted` — so wiring a model into a shell command was already impossible to *publish*. What was missing was telling the author *before* they pressed Save: previously the canvas stayed green and the rejection came back as a 422 naming node ids they then had to correlate to the canvas.
+  - `resources/js/taint.js` — a faithful client-side mirror of core's `TaintAnalyzer` (Kahn order, untrusted-in/untrusted-out, `trusted` as the only thing that stops propagation), reading the SAME catalog fields core serialises so there is no second vocabulary to drift. Advisory only: if it and the server ever disagree, the server wins.
+  - The offending wire renders **amber and dashed**, deliberately not the red used for type/fan-in errors. They are both "the server will reject this", but the fix is in a different place — red means these two ports cannot connect, amber means they connect fine and the data arriving is the problem, usually several hops upstream. Painting them the same would send the author to the wrong end of the graph.
+  - The warning names the full path (`llm.summary -> format.out -> shell.command`), not just the sink, and Save is blocked.
+  - Demo mode gains `demo.summarise` (a taint source) and `demo.run_command` (a sink whose `command` refuses untrusted data while its `note` does not), so the behaviour is demonstrable and testable.
+
+### Changed
+
+- **`onConnect` now runs a full graph recompute instead of validating its own edge.** Type and fan-in validity are local to the new wire; taint is not. Connecting a model upstream of a chain can turn a wire drawn ten minutes ago into a violation, and a per-edge check would leave that one green and let Save through to a 422.
+- `Contracts\ReadModel::graph()`'s documented port shape and `EloquentReadModel`'s catalog projection now include `provenance` and `requires_trusted`. The values were already flowing through (the projection passes ports through wholesale); the shape annotations were simply stale.
+- The `array` adapter's fixture catalog carries the same two keys on every port, so the demo fixture mirrors the real projection rather than describing a shape that no longer exists.
+- **Requires `padosoft/laravel-flow` `^2.4`** (was `^2.2.1`).
+
+
 ## [2.0.2] - 2026-07-18
 
 ### Fixed

@@ -111,7 +111,7 @@ final class StudioControllerTest extends TestCase
         $response = $this->get(route('flow-admin.studio.catalog'));
 
         $response->assertStatus(200);
-        $response->assertJsonCount(4, 'catalog');
+        $response->assertJsonCount(6, 'catalog');
     }
 
     public function test_edit_graph_endpoint_is_forbidden_by_default(): void

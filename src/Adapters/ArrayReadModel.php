@@ -469,7 +469,7 @@ final class ArrayReadModel implements ReadModel
                 'description' => 'Starts the checkout flow.',
                 'inputs' => [],
                 'outputs' => [
-                    ['key' => 'out', 'type' => 'json', 'required' => false, 'label' => 'Order payload', 'multiple' => false],
+                    ['key' => 'out', 'type' => 'json', 'required' => false, 'label' => 'Order payload', 'multiple' => false, 'provenance' => 'derived', 'requires_trusted' => false],
                 ],
             ],
             'demo.validate' => [
@@ -479,10 +479,10 @@ final class ArrayReadModel implements ReadModel
                 'icon' => 'check',
                 'description' => 'Validates the order payload.',
                 'inputs' => [
-                    ['key' => 'in', 'type' => 'json', 'required' => true, 'label' => 'Order payload', 'multiple' => false],
+                    ['key' => 'in', 'type' => 'json', 'required' => true, 'label' => 'Order payload', 'multiple' => false, 'provenance' => 'derived', 'requires_trusted' => false],
                 ],
                 'outputs' => [
-                    ['key' => 'valid', 'type' => 'bool', 'required' => false, 'label' => 'Is valid', 'multiple' => false],
+                    ['key' => 'valid', 'type' => 'bool', 'required' => false, 'label' => 'Is valid', 'multiple' => false, 'provenance' => 'derived', 'requires_trusted' => false],
                 ],
             ],
             'demo.charge' => [
@@ -492,10 +492,10 @@ final class ArrayReadModel implements ReadModel
                 'icon' => 'send',
                 'description' => 'Charges the customer.',
                 'inputs' => [
-                    ['key' => 'authorized', 'type' => 'bool', 'required' => true, 'label' => 'Authorized', 'multiple' => false],
+                    ['key' => 'authorized', 'type' => 'bool', 'required' => true, 'label' => 'Authorized', 'multiple' => false, 'provenance' => 'derived', 'requires_trusted' => false],
                 ],
                 'outputs' => [
-                    ['key' => 'receipt', 'type' => 'text', 'required' => false, 'label' => 'Receipt id', 'multiple' => false],
+                    ['key' => 'receipt', 'type' => 'text', 'required' => false, 'label' => 'Receipt id', 'multiple' => false, 'provenance' => 'derived', 'requires_trusted' => false],
                 ],
             ],
             'demo.notify' => [
@@ -505,7 +505,36 @@ final class ArrayReadModel implements ReadModel
                 'icon' => 'bell',
                 'description' => 'Sends a confirmation.',
                 'inputs' => [
-                    ['key' => 'message', 'type' => 'text', 'required' => true, 'label' => 'Message', 'multiple' => false],
+                    ['key' => 'message', 'type' => 'text', 'required' => true, 'label' => 'Message', 'multiple' => false, 'provenance' => 'derived', 'requires_trusted' => false],
+                ],
+                'outputs' => [],
+            ],
+            // A taint SOURCE and a taint SINK, mirroring DemoSummariseNode /
+            // DemoRunCommandNode. Without a pair like this in the demo
+            // catalog the Studio's provenance rendering has nothing to
+            // render, so it would be neither demonstrable nor testable.
+            'demo.summarise' => [
+                'type' => 'demo.summarise',
+                'name' => 'Summarise (AI)',
+                'category' => 'ai',
+                'icon' => 'sparkles',
+                'description' => 'Summarises text with a model. Its output is untrusted.',
+                'inputs' => [
+                    ['key' => 'text', 'type' => 'text', 'required' => true, 'label' => 'Source text', 'multiple' => false, 'provenance' => 'derived', 'requires_trusted' => false],
+                ],
+                'outputs' => [
+                    ['key' => 'summary', 'type' => 'text', 'required' => false, 'label' => 'Summary', 'multiple' => false, 'provenance' => 'untrusted', 'requires_trusted' => false],
+                ],
+            ],
+            'demo.run_command' => [
+                'type' => 'demo.run_command',
+                'name' => 'Run Command',
+                'category' => 'ops',
+                'icon' => 'terminal',
+                'description' => 'Runs a command. Its command port refuses untrusted data.',
+                'inputs' => [
+                    ['key' => 'command', 'type' => 'text', 'required' => true, 'label' => 'Command', 'multiple' => false, 'provenance' => 'derived', 'requires_trusted' => true],
+                    ['key' => 'note', 'type' => 'text', 'required' => false, 'label' => 'Note', 'multiple' => false, 'provenance' => 'derived', 'requires_trusted' => false],
                 ],
                 'outputs' => [],
             ],

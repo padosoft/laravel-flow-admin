@@ -81,7 +81,11 @@ interface ReadModel
      * not something this adapter re-verifies on every read. `catalog` maps
      * node type => `NodeDefinition::toArray()`'s rendering-relevant subset
      * (`{type, name, category, icon, description, inputs, outputs}`, each
-     * port `{key, type, required, label, multiple}`).
+     * port `{key, type, required, label, multiple, provenance,
+     * requires_trusted}`). The last two carry core's taint declarations —
+     * `provenance` on an output (`untrusted` / `derived` / `trusted`) and
+     * `requires_trusted` on an input — so the canvas can warn about a wire
+     * before the author reaches `GraphValidator`.
      *
      * Every node's `config` is stripped (see `Support\GraphRedactor`)
      * before it reaches this return value: core has no "sensitive config
