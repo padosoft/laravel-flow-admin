@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-08-26
+
 ### Added
 
 - **Provenance / taint warnings in the Studio canvas.** Core's `GraphValidator` (laravel-flow 2.4) already refuses to publish a graph in which untrusted data reaches a port declaring `requires_trusted` — so wiring a model into a shell command was already impossible to *publish*. What was missing was telling the author *before* they pressed Save: previously the canvas stayed green and the rejection came back as a 422 naming node ids they then had to correlate to the canvas.
